@@ -10,11 +10,12 @@ from PyQt5 import QtWidgets, QtCore
 from PyQt5 import QtGui
 import sys
 from ui.order_dialog import Ui_Dialog
-from ui.acc_info import Ui_Form
+from ui.acc_info import Ui_Form_acc_info
 from ui.sp_login import Ui_Dialog_sp_login
 import datetime as dt
 from spapi.spAPI import *
-from Spfunc import deinit_spapi
+import os
+import pickle
 # from sp_func.local import addOrder
 
 class OrderDialog(QDialog, Ui_Dialog):
@@ -28,6 +29,7 @@ class OrderDialog(QDialog, Ui_Dialog):
 
     def init_state(self):
         self.dateEdit_ValidTime.setDate(dt.datetime.now().date())
+        self.dateTimeEdit_sched_time.setDateTime(dt.datetime.now())
         self.spinBox_market_level.setDisabled(True)
         self.label_ValidTime.setHidden(True)
         self.dateEdit_ValidTime.setHidden(True)
@@ -169,18 +171,18 @@ class OrderDialog(QDialog, Ui_Dialog):
                                                QtWidgets.QMessageBox.No)
         if reply == QtWidgets.QMessageBox.Yes:
             a0.accept()
-            deinit_spapi()
             # pid = os.getpid()
             # os.system(f'taskkill /F /PID {pid}')
         else:
             a0.ignore()
 
 
-class AccInfoWidget(QtWidgets.QWidget, Ui_Form):
+class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
-        Ui_Form.__init__(self)
+        Ui_Form_acc_info.__init__(self)
         self.setupUi(self)
+
 
 
 
@@ -189,10 +191,27 @@ class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
         QDialog.__init__(self, parent)
         Ui_Dialog_sp_login.__init__(self)
         self.setupUi(self)
+        self.init_info()
         # self.accepted.connect(lambda :AccInfoWidget())
 
     def login_waring(self, text):
         QtWidgets.QMessageBox.warning(self,'登录错误',text)
+
+    def init_info(self):
+        if os.path.exists('info.plk'):
+            try:
+                with open('info.plk', 'rb') as f:
+                    info = pickle.load(f)
+                    self.lineEdit_host.setText(info['host'])
+                    self.lineEdit_port.setText(str(info['port']))
+                    self.lineEdit_license.setText(info['License'])
+                    self.lineEdit_app_id.setText(info['app_id'])
+                    self.lineEdit_user_id.setText(info['user_id'])
+            except Exception as e:
+                print(e)
+
+
+
 
 
 
