@@ -120,15 +120,20 @@ class OrderDialog(QDialog, Ui_Dialog):
                     order_kwargs['StopLevel'] = 0
             elif _condtype_index == 1:
                 order_kwargs['StopType'] = 'L'
-                order_kwargs['Price'] = self.spinBox_StopLevel2.value() + self.spinBox_toler.value() if BuySell == 'B' \
-                    else self.spinBox_StopLevel2.value() - self.spinBox_toler.value()
+                order_kwargs['Price'] = (self.spinBox_StopLevel2.value() + self.spinBox_toler.value()) if BuySell == 'B' \
+                    else (self.spinBox_StopLevel2.value() - self.spinBox_toler.value())
                 order_kwargs['StopLevel'] = self.spinBox_StopLevel2.value()
                 if self.checkBox_Trailing_Stop.isChecked():
                     order_kwargs['CondType'] = 6
                     order_kwargs['ValidType'] = 0
+                    current_price = get_price_by_code(order_kwargs['ProdCode'])
                     if BuySell == 'B':
+                        order_kwargs['UpLevel'] = current_price.Ask[0]
+                        order_kwargs['UpPrice'] = order_kwargs['StopLevel']
                         order_kwargs['DownLevel'] = self.spinBox_trailing_stop_step.value()
                     else:
+                        order_kwargs['DownLevel'] = current_price.Bid[0]
+                        order_kwargs['DownPrice'] = order_kwargs['StopLevel']
                         order_kwargs['UpLevel'] = self.spinBox_trailing_stop_step.value()
             elif _condtype_index == 2:
                 order_kwargs['ValidType'] = 0
