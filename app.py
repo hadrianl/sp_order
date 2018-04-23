@@ -12,6 +12,8 @@ from spapi.spAPI import *
 import datetime as dt
 from spapi.conf.util import ORDER_STATUS
 import pickle
+from PyQt5.Qt import QObject
+from PyQt5.QtCore import pyqtSignal
 
 
 local_login = False
@@ -29,7 +31,7 @@ def info_handle(type, info, info_struct=None, handle_type=0):
     try:
         is_struct = map(lambda x: isinstance(info_struct, x),
                      [SPApiOrder, SPApiPos, SPApiTrade, SPApiAccBal, SPApiAccInfo])
-        update_func = [_update_order, _update_postion, _update_accbals, _update_accbals, _update_acc_info]
+        update_func = [_update_order, _update_postion, _update_trade, _update_accbals, _update_acc_info]
         for b, f in zip(is_struct, update_func):
             if b:
                 f(info_struct)
@@ -42,6 +44,7 @@ def update_acc_info():
         _update_acc_info(acc_info)
     except Exception as e:
         print(e)
+        raise e
 
 def _update_acc_info(acc_info):
     acc_info_dict = {}
@@ -50,28 +53,28 @@ def _update_acc_info(acc_info):
 
     global base_ccy
     base_ccy = acc_info_dict['BaseCcy'].decode()
-    AccInfo.tableWidget_acc_info.setItem(0, 0, QTableWidgetItem(f"{acc_info_dict['BuyingPower']:,} {base_ccy}"))
-    AccInfo.tableWidget_acc_info.setItem(1, 0, QTableWidgetItem(f"{acc_info_dict['NAV']:,} {base_ccy}"))
-    AccInfo.tableWidget_acc_info.setItem(2, 0, QTableWidgetItem(f"{acc_info_dict['MarginCall']:,} {base_ccy}"))
-    AccInfo.tableWidget_acc_info.setItem(3, 0, QTableWidgetItem(f"{acc_info_dict['CommodityPL']:,} {base_ccy}"))
-    AccInfo.tableWidget_acc_info.setItem(4, 0, QTableWidgetItem(f"{acc_info_dict['IMargin']:,} {base_ccy}"))
-    AccInfo.tableWidget_acc_info.setItem(5, 0, QTableWidgetItem(f"{acc_info_dict['MMargin']:,} {base_ccy}"))
-    AccInfo.tableWidget_acc_info.setItem(6, 0, QTableWidgetItem())
-    AccInfo.tableWidget_acc_info.setItem(7, 0, QTableWidgetItem(f"{acc_info_dict['MaxMargin']:,} {base_ccy}"))
-    AccInfo.tableWidget_acc_info.setItem(8, 0, QTableWidgetItem(acc_info_dict['MarginPeriod'].decode()))
-    AccInfo.tableWidget_acc_info.setItem(9, 0, QTableWidgetItem(f"{acc_info_dict['CashBal']:,} {base_ccy}"))
-    AccInfo.tableWidget_acc_info.setItem(10, 0, QTableWidgetItem(f"{acc_info_dict['CreditLimit']:,} {base_ccy}"))
-    AccInfo.tableWidget_acc_info.setItem(11, 0, QTableWidgetItem(acc_info_dict['CtrlLevel'].decode()))
-    AccInfo.tableWidget_acc_info.setItem(12, 0, QTableWidgetItem(acc_info_dict['MarginClass'].decode()))
-    AccInfo.tableWidget_acc_info.setItem(13, 0, QTableWidgetItem(acc_info_dict['AEId'].decode()))
-    print(acc_info_dict)
-    AccInfo.tableWidget_acc_info.update()
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(0, 0, f"{acc_info_dict['BuyingPower']:,} {base_ccy}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(1, 0, f"{acc_info_dict['NAV']:,} {base_ccy}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(2, 0, f"{acc_info_dict['MarginCall']:,} {base_ccy}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(3, 0, f"{acc_info_dict['CommodityPL']:,} {base_ccy}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(4, 0, f"{acc_info_dict['IMargin']:,} {base_ccy}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(5, 0, f"{acc_info_dict['MMargin']:,} {base_ccy}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, '')
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(7, 0, f"{acc_info_dict['MaxMargin']:,} {base_ccy}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(8, 0, acc_info_dict['MarginPeriod'].decode())
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(9, 0, f"{acc_info_dict['CashBal']:,} {base_ccy}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(10, 0, f"{acc_info_dict['CreditLimit']:,} {base_ccy}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(11, 0, acc_info_dict['CtrlLevel'].decode())
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(12, 0, acc_info_dict['MarginClass'].decode())
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(13, 0, acc_info_dict['AEId'].decode())
+    print('acc_info:', acc_info_dict)
     return acc_info_dict
 
 
 def update_orders():
     try:
         orders_array = get_orders_by_array()
+        print(orders_array)
         orders = []
         for i in range(AccInfo.tableWidget_orders.rowCount()):
             AccInfo.tableWidget_orders.removeRow(0)
@@ -80,8 +83,8 @@ def update_orders():
             orders.append(_update_order(o))
 
     except Exception as e:
-        print(e)
-
+        print('order_Error:',e)
+        raise e
 def _update_order(o):
     order_dict = {}
     for name, c_type in o._fields_:
@@ -94,24 +97,23 @@ def _update_order(o):
     else:
         AccInfo.tableWidget_orders.insertRow(0)
 
-    AccInfo.tableWidget_orders.setItem(r, 0, QTableWidgetItem(str(order_dict['IntOrderNo'])))
-    AccInfo.tableWidget_orders.setItem(r, 1, QTableWidgetItem(order_dict['ProdCode'].decode()))
-    AccInfo.tableWidget_orders.setItem(r, 2, QTableWidgetItem())
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 0, str(order_dict['IntOrderNo']))
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 1, order_dict['ProdCode'].decode())
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 2, '')
     if order_dict['BuySell'].decode() == 'B':
-        AccInfo.tableWidget_orders.setItem(r, 3, QTableWidgetItem(str(order_dict['Qty'])))
+        AccInfo.tableWidget_orders.set_item_sig.emit(r, 3, str(order_dict['Qty']))
     else:
-        AccInfo.tableWidget_orders.setItem(r, 4, QTableWidgetItem(str(order_dict['Qty'])))
-    AccInfo.tableWidget_orders.setItem(r, 5, QTableWidgetItem(f"{order_dict['Price']:,}"))
-    AccInfo.tableWidget_orders.setItem(r, 6, QTableWidgetItem(str(dt.datetime.fromtimestamp(order_dict['ValidTime']))))
-    AccInfo.tableWidget_orders.setItem(r, 7, QTableWidgetItem())
-    AccInfo.tableWidget_orders.setItem(r, 8, QTableWidgetItem(ORDER_STATUS[order_dict['Status']]))
-    AccInfo.tableWidget_orders.setItem(r, 9, QTableWidgetItem(str(order_dict['TradedQty'])))
-    AccInfo.tableWidget_orders.setItem(r, 10, QTableWidgetItem(str(order_dict['Initiator'].decode())))
-    AccInfo.tableWidget_orders.setItem(r, 11, QTableWidgetItem(order_dict['Ref'].decode()))
-    AccInfo.tableWidget_orders.setItem(r, 12, QTableWidgetItem(str(dt.datetime.fromtimestamp(order_dict['TimeStamp']))))
-    AccInfo.tableWidget_orders.setItem(r, 13, QTableWidgetItem(str(order_dict['ExtOrderNo'])))
-    AccInfo.tableWidget_orders.update()
-    print(order_dict)
+        AccInfo.tableWidget_orders.set_item_sig.emit(r, 4, str(order_dict['Qty']))
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 5, f"{order_dict['Price']:,}")
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 6, str(dt.datetime.fromtimestamp(order_dict['ValidTime'])))
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 7, '')
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 8, ORDER_STATUS[order_dict['Status']])
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 9, str(order_dict['TradedQty']))
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 10, str(order_dict['Initiator'].decode()))
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 11, order_dict['Ref'].decode('GBK'))
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 12, str(dt.datetime.fromtimestamp(order_dict['TimeStamp'])))
+    AccInfo.tableWidget_orders.set_item_sig.emit(r, 13, str(order_dict['ExtOrderNo']))
+    print('order:', order_dict)
     return order_dict
 
 
@@ -124,7 +126,8 @@ def update_positions():
         for p in pos_array:
             pos.append(_update_postion(p))
     except Exception as e:
-        print(e)
+        print('pos_Error:',e)
+        raise e
 
 def _update_postion(p):
     pos_dict = {}
@@ -139,24 +142,23 @@ def _update_postion(p):
     else:
         AccInfo.tableWidget_pos.insertRow(0)
 
-    AccInfo.tableWidget_pos.setItem(r, 0, QTableWidgetItem(pos_dict['ProdCode'].decode()))
-    AccInfo.tableWidget_pos.setItem(r, 1, QTableWidgetItem())
-    AccInfo.tableWidget_pos.setItem(r, 2, QTableWidgetItem(str(pos_dict['Qty'])))
-    AccInfo.tableWidget_pos.setItem(r, 3, QTableWidgetItem(str(pos_dict['DepQty'])))
-    AccInfo.tableWidget_pos.setItem(r, 4, QTableWidgetItem(f"{pos_dict['LongQty']}@{(pos_dict['LongTotalAmt']/pos_dict['LongQty']):,.2f}"))
-    AccInfo.tableWidget_pos.setItem(r, 5, QTableWidgetItem(f"{-pos_dict['ShortQty']}@{(pos_dict['ShortTotalAmt']/pos_dict['ShortQty']):,.2f}"))
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 0, pos_dict['ProdCode'].decode())
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 1, '')
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 2, str(pos_dict['Qty']))
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 3, str(pos_dict['DepQty']))
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 4, f"{pos_dict['LongQty']}@{(pos_dict['LongTotalAmt']/pos_dict['LongQty']):,.2f}")
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 5, f"{-pos_dict['ShortQty']}@{(pos_dict['ShortTotalAmt']/pos_dict['ShortQty']):,.2f}")
     net_pos = pos_dict['LongQty'] - pos_dict['ShortQty']
     net_pos_amt = pos_dict['LongTotalAmt'] - pos_dict['ShortTotalAmt']
-    AccInfo.tableWidget_pos.setItem(r, 6, QTableWidgetItem(str(net_pos)))
-    AccInfo.tableWidget_pos.setItem(r, 7, QTableWidgetItem(f"{net_pos}@{net_pos_amt/(1 if net_pos==0 else net_pos):,.2f}"))
-    AccInfo.tableWidget_pos.setItem(r, 8, QTableWidgetItem())
-    AccInfo.tableWidget_pos.setItem(r, 9, QTableWidgetItem(f"{pos_dict['PL']:,}"))
-    AccInfo.tableWidget_pos.setItem(r, 10, QTableWidgetItem())
-    AccInfo.tableWidget_pos.setItem(r, 11, QTableWidgetItem(f"{pos_dict['ExchangeRate']:,}"))
-    AccInfo.tableWidget_pos.setItem(r, 12, QTableWidgetItem(f"{pos_dict['PLBaseCcy']:,}"))
-    AccInfo.tableWidget_pos.setItem(r, 13, QTableWidgetItem())
-    AccInfo.tableWidget_pos.update()
-    print(pos_dict)
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 6, str(net_pos))
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 7, f"{net_pos}@{net_pos_amt/(1 if net_pos==0 else net_pos):,.2f}")
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 8, '')
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 9, f"{pos_dict['PL']:,}")
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 10, )
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 11, f"{pos_dict['ExchangeRate']:,}")
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 12, f"{pos_dict['PLBaseCcy']:,}")
+    AccInfo.tableWidget_pos.set_item_sig.emit(r, 13, )
+    print('pos:', pos_dict)
     return pos_dict
 
 
@@ -169,9 +171,11 @@ def update_trades():
 
         for t in trades_array:
             trades.append(_update_trade(t))
-        print(trades)
+
     except Exception as e:
-        print(e)
+        print('trade_Error:',e)
+        raise e
+
 def _update_trade(t):
     trade_dict = {}
     for name, c_type in t._fields_:
@@ -185,24 +189,23 @@ def _update_trade(t):
     else:
         AccInfo.tableWidget_trades.insertRow(0)
 
-    AccInfo.tableWidget_trades.setItem(r, 0, QTableWidgetItem(trade_dict['ProdCode'].decode()))
-    AccInfo.tableWidget_trades.setItem(r, 1, QTableWidgetItem())
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 0, trade_dict['ProdCode'].decode())
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 1, '')
     if trade_dict['BuySell'].decode() == 'B':
-        AccInfo.tableWidget_trades.setItem(r, 2, QTableWidgetItem(str(trade_dict['Qty'])))
+        AccInfo.tableWidget_trades.set_item_sig.emit(r, 2, str(trade_dict['Qty']))
     else:
-        AccInfo.tableWidget_trades.setItem(r, 3, QTableWidgetItem(str(trade_dict['Qty'])))
-    AccInfo.tableWidget_trades.setItem(r, 4, QTableWidgetItem(f"{trade_dict['AvgPrice']:,}"))
-    AccInfo.tableWidget_trades.setItem(r, 5, QTableWidgetItem(str(trade_dict['TradeNo'])))
-    AccInfo.tableWidget_trades.setItem(r, 6, QTableWidgetItem(ORDER_STATUS[trade_dict['Status']]))
-    AccInfo.tableWidget_trades.setItem(r, 7, QTableWidgetItem(str(trade_dict['Initiator'].decode())))
-    AccInfo.tableWidget_trades.setItem(r, 8, QTableWidgetItem(str(trade_dict['Ref'].decode())))
-    AccInfo.tableWidget_trades.setItem(r, 9, QTableWidgetItem(str(dt.datetime.fromtimestamp(trade_dict['TradeTime']))))
-    AccInfo.tableWidget_trades.setItem(r, 10, QTableWidgetItem(f"{trade_dict['OrderPrice']:,}"))
-    AccInfo.tableWidget_trades.setItem(r, 11, QTableWidgetItem(str(trade_dict['IntOrderNo'])))
-    AccInfo.tableWidget_trades.setItem(r, 12, QTableWidgetItem(str(trade_dict['ExtOrderNo'])))
-    AccInfo.tableWidget_trades.setItem(r, 13, QTableWidgetItem(str(trade_dict['RecNO'])))
-    AccInfo.tableWidget_trades.update()
-    print(trade_dict)
+        AccInfo.tableWidget_trades.set_item_sig.emit(r, 3, str(trade_dict['Qty']))
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 4, f"{trade_dict['AvgPrice']:,}")
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 5, str(trade_dict['TradeNo']))
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 6, ORDER_STATUS[trade_dict['Status']])
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 7, str(trade_dict['Initiator'].decode()))
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 8, str(trade_dict['Ref'].decode()))
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 9, str(dt.datetime.fromtimestamp(trade_dict['TradeTime'])))
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 10, f"{trade_dict['OrderPrice']:,}")
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 11, str(trade_dict['IntOrderNo']))
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 12, str(trade_dict['ExtOrderNo']))
+    AccInfo.tableWidget_trades.set_item_sig.emit(r, 13, str(trade_dict['RecNO']))
+    print('trade:', trade_dict)
     return trade_dict
 
 
@@ -216,7 +219,8 @@ def update_accbals():
         for b in accbal_array:
             accbal.append(_update_accbals(b))
     except Exception as e:
-        print(e)
+        print('accbal_Error:', e)
+        raise e
 
 def _update_accbals(b):
     accbal_dict = {}
@@ -225,41 +229,41 @@ def _update_accbals(b):
 
     r = 0
     for i in range(AccInfo.tableWidget_bal.rowCount()):
-        print(i)
         if accbal_dict['Ccy'].decode() == AccInfo.tableWidget_bal.item(i, 0).text():
             r = i
             break
     else:
         AccInfo.tableWidget_bal.insertRow(0)
 
-    AccInfo.tableWidget_bal.setItem(r, 0, QTableWidgetItem(accbal_dict['Ccy'].decode()))
-    AccInfo.tableWidget_bal.setItem(r, 1, QTableWidgetItem(f"{accbal_dict['CashBF']:,}"))
-    AccInfo.tableWidget_bal.setItem(r, 2, QTableWidgetItem(f"{accbal_dict['NotYetValue']:,}"))
-    AccInfo.tableWidget_bal.setItem(r, 3, QTableWidgetItem(f"{accbal_dict['TodayCash']:,}"))
+    AccInfo.tableWidget_bal.set_item_sig.emit(r, 0, accbal_dict['Ccy'].decode())
+    AccInfo.tableWidget_bal.set_item_sig.emit(r, 1, f"{accbal_dict['CashBF']:,}")
+    AccInfo.tableWidget_bal.set_item_sig.emit(r, 2, f"{accbal_dict['NotYetValue']:,}")
+    AccInfo.tableWidget_bal.set_item_sig.emit(r, 3, f"{accbal_dict['TodayCash']:,}")
     total_cash = accbal_dict['CashBF'] + accbal_dict['NotYetValue'] + accbal_dict['TodayCash']
-    AccInfo.tableWidget_bal.setItem(r, 4, QTableWidgetItem(str(total_cash)))
-    AccInfo.tableWidget_bal.setItem(r, 5, QTableWidgetItem(f"{accbal_dict['Unpresented']:,}"))
+    AccInfo.tableWidget_bal.set_item_sig.emit(r, 4, str(total_cash))
+    AccInfo.tableWidget_bal.set_item_sig.emit(r, 5, f"{accbal_dict['Unpresented']:,}")
     ccy = get_ccy_rate_by_ccy(accbal_dict['Ccy'].decode()).value
-    AccInfo.tableWidget_bal.setItem(r, 6, QTableWidgetItem(str(ccy)))
-    AccInfo.tableWidget_bal.setItem(r, 7, QTableWidgetItem(f"{total_cash * ccy:,}"))
+    AccInfo.tableWidget_bal.set_item_sig.emit(r, 6, str(ccy))
+    AccInfo.tableWidget_bal.set_item_sig.emit(r, 7, f"{total_cash * ccy:,}")
     # b['Todayout']
+    AccInfo.tableWidget_bal.repaint()
     AccInfo.tableWidget_bal.update()
-    print(accbal_dict)
+    print('accbal:', accbal_dict)
     return accbal_dict
 
 def update_ccy_rate():
     try:
         ccy_list = ['CAD', 'CHF', 'EUR', 'GBP', 'HKD', 'JPY', 'KRW', 'MYR', 'SGD', 'USD']
         ccy_dict = {ccy:get_ccy_rate_by_ccy(ccy).value for ccy in ccy_list}
-        print(ccy_dict)
         for i in range(AccInfo.tableWidget_ccy_rate.rowCount()):
             AccInfo.tableWidget_ccy_rate.removeRow(0)
-        for i, (ccy,rate) in enumerate(ccy_dict.items()):
+        for i, (ccy, rate) in enumerate(ccy_dict.items()):
             AccInfo.tableWidget_ccy_rate.insertRow(i)
             AccInfo.tableWidget_ccy_rate.setVerticalHeaderItem(i, QTableWidgetItem(ccy))
-            AccInfo.tableWidget_ccy_rate.setItem(i, 0, QTableWidgetItem(str(rate)))
+            AccInfo.tableWidget_ccy_rate.set_item_sig.emit(i, 0, str(rate))
     except Exception as e:
-        print(e)
+        print('ccy_Error:', e)
+        raise e
 
 info_update = [update_acc_info,
                update_orders,
@@ -291,7 +295,6 @@ def business_date_reply(business_date):
 @on_login_reply  # 登录调用
 def reply(user_id, ret_code, ret_msg):
     if ret_code == 0:
-        print('5555')
         global local_login
         info_handle('<账户>', f'{user_id.decode()}登录成功')
         local_login = True
@@ -300,18 +303,20 @@ def reply(user_id, ret_code, ret_msg):
         local_login = False
 
 # ----------------------------------------行情数据主推---------------------------------------------------------------------------------------------------
-@on_ticker_update  # ticker数据推送
-def ticker_update(ticker):
-    ...
-
+# @on_ticker_update  # ticker数据推送
+# def ticker_update(ticker):
+#     ...
+#
+#
 
 @on_api_price_update  # price数据推送
 def price_update(price):
     price_dict = {}
     for name, c_type in price._fields_:
         price_dict[name] = getattr(price, name)
-    print(price_dict)
-# -------------------------------------------------------------------------------------------------------------------------------------------------------
+    # AccInfo.tableWidget_acc_info.item(6, 0).setText()
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, str(price.Bid[0]))
+# # -------------------------------------------------------------------------------------------------------------------------------------------------------
 
 @on_connecting_reply  # 连接状态改变时调用
 def connecting_reply(host_id, con_status):
@@ -390,7 +395,8 @@ def init_spapi():
         Order.show()
         AccInfo.show()
         import time
-        time.sleep(1)
+        time.sleep(1.5)
+        # AccInfo.toolButton_update_info.released.emit()
         # load_instrument_list()
         # load_productinfolist_by_code('HSI')
         # get_instrument_by_code('HSI')
@@ -453,14 +459,14 @@ def addOrder(**kwargs):
     if local_login:
         add_order(**kwargs)
     else:
-        print(2, kwargs)
+        print('未登录：', kwargs)
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     Login = SpLoginDialog()
     Order = OrderDialog()
     AccInfo = AccInfoWidget()
     Login.accepted.connect(lambda :init_spapi())
-    Order.checkBox_lock.toggled.connect(lambda x: get_product_info(Order.lineEdit_ProdCode.text()) if x else ...)
+    Order.checkBox_lock.toggled.connect(lambda x: subscribe_price(Order.lineEdit_ProdCode.text(), 1) if x else subscribe_price(Order.lineEdit_ProdCode.text(), 0))
 
     def print_info(info_array):
         info_dict = {}

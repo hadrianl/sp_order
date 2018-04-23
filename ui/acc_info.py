@@ -16,7 +16,7 @@ class Ui_Form_acc_info(object):
         self.horizontalLayout_10.setObjectName("horizontalLayout_10")
         self.horizontalLayout_9 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_9.setObjectName("horizontalLayout_9")
-        self.tableWidget_acc_info = QtWidgets.QTableWidget(Form_acc_info)
+        self.tableWidget_acc_info = QInfoWidget(Form_acc_info)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -103,7 +103,7 @@ class Ui_Form_acc_info(object):
         spacerItem1 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.horizontalLayout_2.addItem(spacerItem1)
         self.verticalLayout.addLayout(self.horizontalLayout_2)
-        self.tableWidget_orders = QtWidgets.QTableWidget(self.tab_orders)
+        self.tableWidget_orders = QInfoWidget(self.tab_orders)
         self.tableWidget_orders.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.tableWidget_orders.setObjectName("tableWidget_orders")
         self.tableWidget_orders.setColumnCount(14)
@@ -157,7 +157,7 @@ class Ui_Form_acc_info(object):
         spacerItem2 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.horizontalLayout_3.addItem(spacerItem2)
         self.verticalLayout_2.addLayout(self.horizontalLayout_3)
-        self.tableWidget_pos = QtWidgets.QTableWidget(self.tab_pos)
+        self.tableWidget_pos = QInfoWidget(self.tab_pos)
         self.tableWidget_pos.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.tableWidget_pos.setObjectName("tableWidget_pos")
         self.tableWidget_pos.setColumnCount(14)
@@ -201,7 +201,7 @@ class Ui_Form_acc_info(object):
         self.tab_trades.setObjectName("tab_trades")
         self.horizontalLayout_4 = QtWidgets.QHBoxLayout(self.tab_trades)
         self.horizontalLayout_4.setObjectName("horizontalLayout_4")
-        self.tableWidget_trades = QtWidgets.QTableWidget(self.tab_trades)
+        self.tableWidget_trades = QInfoWidget(self.tab_trades)
         self.tableWidget_trades.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.tableWidget_trades.setObjectName("tableWidget_trades")
         self.tableWidget_trades.setColumnCount(14)
@@ -244,7 +244,7 @@ class Ui_Form_acc_info(object):
         self.tab_bal.setObjectName("tab_bal")
         self.horizontalLayout_5 = QtWidgets.QHBoxLayout(self.tab_bal)
         self.horizontalLayout_5.setObjectName("horizontalLayout_5")
-        self.tableWidget_bal = QtWidgets.QTableWidget(self.tab_bal)
+        self.tableWidget_bal = QInfoWidget(self.tab_bal)
         self.tableWidget_bal.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.tableWidget_bal.setObjectName("tableWidget_bal")
         self.tableWidget_bal.setColumnCount(8)
@@ -275,7 +275,7 @@ class Ui_Form_acc_info(object):
         self.tab_ccy.setObjectName("tab_ccy")
         self.horizontalLayout_6 = QtWidgets.QHBoxLayout(self.tab_ccy)
         self.horizontalLayout_6.setObjectName("horizontalLayout_6")
-        self.tableWidget_ccy_rate = QtWidgets.QTableWidget(self.tab_ccy)
+        self.tableWidget_ccy_rate = QInfoWidget(self.tab_ccy)
         self.tableWidget_ccy_rate.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.tableWidget_ccy_rate.setObjectName("tableWidget_ccy_rate")
         self.tableWidget_ccy_rate.setColumnCount(1)
@@ -294,7 +294,7 @@ class Ui_Form_acc_info(object):
         self.horizontalLayout_10.addLayout(self.horizontalLayout_9)
 
         self.retranslateUi(Form_acc_info)
-        self.tabWidget_acc_info.setCurrentIndex(0)
+        self.tabWidget_acc_info.setCurrentIndex(4)
         QtCore.QMetaObject.connectSlotsByName(Form_acc_info)
 
     def retranslateUi(self, Form_acc_info):
@@ -443,4 +443,5 @@ class Ui_Form_acc_info(object):
         item.setText(_translate("Form_acc_info", "参考兑换率(HKD)"))
         self.tabWidget_acc_info.setTabText(self.tabWidget_acc_info.indexOf(self.tab_ccy), _translate("Form_acc_info", "参考汇率"))
 
+from ui.baseitems import QInfoWidget
 import ui.order_rc
