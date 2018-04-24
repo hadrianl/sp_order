@@ -5,13 +5,14 @@
 # @File    : app.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 
-from PyQt5.QtWidgets import QApplication, QMessageBox, QTableWidgetItem
-from SpInfo_ui import SpLoginDialog, OrderDialog, AccInfoWidget
+from PyQt5.QtWidgets import QApplication, QMessageBox, QTableWidgetItem, QDesktopWidget, QMainWindow
+from SpInfo_ui import SpLoginDialog, OrderDialog, AccInfoWidget, QuickOrderWidget
 import sys
 from spapi.spAPI import *
 import datetime as dt
 from spapi.conf.util import ORDER_STATUS
 import pickle
+from ui.baseitems import QPriceUpdate
 from PyQt5.Qt import QObject
 from PyQt5.QtCore import pyqtSignal
 
@@ -61,7 +62,7 @@ def _update_acc_info(acc_info):
     AccInfo.tableWidget_acc_info.set_item_sig.emit(5, 0, f"{acc_info_dict['MMargin']:,} {base_ccy}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, '')
     AccInfo.tableWidget_acc_info.set_item_sig.emit(7, 0, f"{acc_info_dict['MaxMargin']:,} {base_ccy}")
-    AccInfo.tableWidget_acc_info.set_item_sig.emit(8, 0, acc_info_dict['MarginPeriod'].decode())
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(8, 0, acc_info_dict['MarginPeriod'].decode('GBK'))
     AccInfo.tableWidget_acc_info.set_item_sig.emit(9, 0, f"{acc_info_dict['CashBal']:,} {base_ccy}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(10, 0, f"{acc_info_dict['CreditLimit']:,} {base_ccy}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(11, 0, acc_info_dict['CtrlLevel'].decode())
@@ -314,6 +315,8 @@ def price_update(price):
     price_dict = {}
     for name, c_type in price._fields_:
         price_dict[name] = getattr(price, name)
+
+    qprice.price_update_sig.emit(price_dict)
     # AccInfo.tableWidget_acc_info.item(6, 0).setText()
     AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, str(price.Bid[0]))
 # # -------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -392,11 +395,14 @@ def init_spapi():
         set_login_info(**info, password=password)
         info_handle('<连接>', f"设置登录信息-host:{info['host']} port:{info['port']} license:{info['License']} app_id:{info['app_id']} user_id:{info['user_id']}")
         login()
+        # win.show()
         Order.show()
         AccInfo.show()
+        QuickOrder.show()
         import time
         time.sleep(1.5)
-        # AccInfo.toolButton_update_info.released.emit()
+        Order.comboBox_account.addItem(info['user_id'])
+        AccInfo.toolButton_update_info.released.emit()
         # load_instrument_list()
         # load_productinfolist_by_code('HSI')
         # get_instrument_by_code('HSI')
@@ -462,12 +468,15 @@ def addOrder(**kwargs):
         print('未登录：', kwargs)
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    # win = QMainWindow()
     Login = SpLoginDialog()
     Order = OrderDialog()
     AccInfo = AccInfoWidget()
+    qprice = QPriceUpdate()
+    QuickOrder = QuickOrderWidget()
     Login.accepted.connect(lambda :init_spapi())
-    Order.checkBox_lock.toggled.connect(lambda x: subscribe_price(Order.lineEdit_ProdCode.text(), 1) if x else subscribe_price(Order.lineEdit_ProdCode.text(), 0))
-
+    qprice.price_update_sig.connect(QuickOrder.price_table_update)
+    qprice.price_update_sig.connect(QuickOrder.price_info_update)
     def print_info(info_array):
         info_dict = {}
         for i in info_array:
@@ -486,5 +495,6 @@ if __name__ == '__main__':
     AccInfo.pushButton_inactivate_order.released.connect(lambda :print(AccInfo.tableWidget_orders.item(AccInfo.tableWidget_orders.currentRow(), 0).text()))
     AccInfo.toolButton_update_info.released.connect(lambda :[func() for func in info_update])
 
+    Login.lineEdit_password.setFocus()
     Login.show()
     sys.exit(app.exec_())

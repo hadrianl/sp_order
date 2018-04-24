@@ -11,7 +11,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_Form_acc_info(object):
     def setupUi(self, Form_acc_info):
         Form_acc_info.setObjectName("Form_acc_info")
-        Form_acc_info.resize(1161, 352)
+        Form_acc_info.resize(1161, 322)
         self.horizontalLayout_10 = QtWidgets.QHBoxLayout(Form_acc_info)
         self.horizontalLayout_10.setObjectName("horizontalLayout_10")
         self.horizontalLayout_9 = QtWidgets.QHBoxLayout()
@@ -299,7 +299,7 @@ class Ui_Form_acc_info(object):
 
     def retranslateUi(self, Form_acc_info):
         _translate = QtCore.QCoreApplication.translate
-        Form_acc_info.setWindowTitle(_translate("Form_acc_info", "Form"))
+        Form_acc_info.setWindowTitle(_translate("Form_acc_info", "SP ACCOUNT"))
         item = self.tableWidget_acc_info.verticalHeaderItem(0)
         item.setText(_translate("Form_acc_info", "购买力"))
         item = self.tableWidget_acc_info.verticalHeaderItem(1)

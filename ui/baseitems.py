@@ -7,12 +7,19 @@
 
 
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem
+from PyQt5.Qt import QObject, QIcon
 from PyQt5.QtCore import pyqtSignal
 
 class QInfoWidget(QTableWidget):
-    set_item_sig = pyqtSignal(int, int, str)
+    set_item_sig = pyqtSignal([int, int, str], [int, int, QIcon])
     update_item_sig = pyqtSignal(int, int, str)
     def __init__(self, parent=None):
         QTableWidget.__init__(self, parent)
-        self.set_item_sig.connect(lambda x,y,s: self.setItem(x, y, QTableWidgetItem(s)))
+        self.set_item_sig[int, int, str].connect(lambda x, y, s: self.setItem(x, y, QTableWidgetItem(s)))
+        self.set_item_sig[int, int, QIcon].connect(lambda x, y, icon: self.setItem(x, y, QTableWidgetItem(icon, '')))
         self.update_item_sig.connect(lambda x,y,s: self.item(x, y).setText(s))
+
+class QPriceUpdate(QObject):
+    price_update_sig = pyqtSignal(dict)
+    def __init__(self, parent=None):
+        QObject.__init__(self, parent)

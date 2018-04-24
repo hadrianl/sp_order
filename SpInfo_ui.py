@@ -5,7 +5,7 @@
 # @File    : Spfunc.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 
-from PyQt5.Qt import QDialog
+from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidgetItem, QIcon, QSize, QColor, QFont
 from PyQt5 import QtWidgets, QtCore
 from PyQt5 import QtGui
 import sys
@@ -16,11 +16,12 @@ import datetime as dt
 from spapi.spAPI import *
 import os
 import pickle
+from ui.quick_order import Ui_Form_quick_order
 # from sp_func.local import addOrder
 
 class OrderDialog(QDialog, Ui_Dialog):
-    def __init__(self):
-        QDialog.__init__(self)
+    def __init__(self, parent=None):
+        QDialog.__init__(self, parent)
         Ui_Dialog.__init__(self)
         self.setupUi(self)
         self._price_flag = True
@@ -37,6 +38,8 @@ class OrderDialog(QDialog, Ui_Dialog):
         self.spinBox_StopLevel.setSpecialValueText(' ')
         self.spinBox_StopLevel2.setSpecialValueText(' ')
         self.spinBox_oco_StopLevel.setSpecialValueText(' ')
+        desktop = QDesktopWidget()
+        self.move(desktop.width() - self.width(),(desktop.height() - self.height())/2 - 70)
         # self.spinBox_Price.set
 
 
@@ -91,6 +94,7 @@ class OrderDialog(QDialog, Ui_Dialog):
         self.spinBox_oco_StopLevel.valueChanged.connect(lambda x: (self.spinBox_oco_StopLevel.setValue(30000), setattr(self, '_price_flag', False)) if self._price_flag == 1 else ...)
         self.pushButton_buy.released.connect(lambda :self.order('B'))
         self.pushButton_sell.released.connect(lambda :self.order('S'))
+        self.checkBox_lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
 
 
     def order(self, BuySell):
@@ -187,7 +191,8 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_acc_info.__init__(self)
         self.setupUi(self)
-
+        desktop = QDesktopWidget()
+        self.move(desktop.width() - self.width(), (desktop.height() + self.height()) / 2)
 
 
 
@@ -214,6 +219,109 @@ class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
                     self.lineEdit_user_id.setText(info['user_id'])
             except Exception as e:
                 print(e)
+
+class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
+    def __init__(self, parent=None):
+        QtWidgets.QWidget.__init__(self, parent)
+        Ui_Form_quick_order.__init__(self)
+        self.setupUi(self)
+        self.tableWidget_Price.setColumnWidth(0, 30)
+        self.tableWidget_Price.setColumnWidth(3, 30)
+        self.tableWidget_Price.setColumnWidth(4, 70)
+        self.tableWidget_Price.setColumnWidth(5, 30)
+        self.tableWidget_Price.setColumnWidth(8, 30)
+
+        self.init_signal()
+        self._price_active = False
+
+    def order(self, BuySell, Price):
+        try:
+            order_kwargs = {}
+            order_kwargs['ProdCode'] = self.lineEdit_ProdCode.text()
+            order_kwargs['BuySell'] = BuySell
+            order_kwargs['Qty'] = self.spinBox_Qty.value()
+            order_kwargs['OrderOption'] = self.checkBox_OrderOptions.checkState()
+            order_kwargs['ValidType'] = self.comboBox_VaildType.currentIndex()
+            order_kwargs['CondType'] = 0
+            order_kwargs['Price'] = Price
+        except Exception as e:
+            raise e
+        add_order(**order_kwargs)
+
+    def init_signal(self):
+        self.checkBox_Lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
+        self.pushButton_price_to_middle.released.connect(lambda :self.adjust_ui(20))
+
+
+    def adjust_ui(self, n):
+        last_price = get_price_by_code(self.lineEdit_ProdCode.text()).Last[0]
+        Price = range(int(last_price + n), int(last_price - n), -1)
+        self.tableWidget_Price.clearContents()
+        self.tableWidget_Price.setRowCount(len(Price))
+        self.price_location = {}
+        a=QIcon(os.path.join('ui', 'addorder.png'))
+        for i, p in enumerate(Price):
+            self.price_location[p] = i
+            self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 0, QIcon(os.path.join('ui', 'deleteorder.png')))
+            self.tableWidget_Price.set_item_sig.emit(i, 2, '')
+            self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 3, QIcon(os.path.join('ui', 'addorder.png')))
+            self.tableWidget_Price.set_item_sig.emit(i, 4, str(p))
+            self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 5, QIcon(os.path.join('ui', 'addorder.png')))
+            self.tableWidget_Price.set_item_sig.emit(i, 6, '')
+            self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 8, QIcon(os.path.join('ui', 'deleteorder.png')))
+        self._price_active = True
+
+    def price_table_update(self, price_dict):
+        bids_loc = []
+        asks_loc = []
+        if self._price_active:
+            for i in range(5):
+                # bid.append((price_dict['Bid'][i], ))
+                # ask.append((price_dict['Ask'][i], price_dict['AskQty'][i]))
+                # print(self.price_location[price_dict['Bid'][i]], 0, price_dict['BidQty'][i])
+                bid_loc = self.price_location.get(price_dict['Bid'][i])
+                ask_loc = self.price_location.get(price_dict['Ask'][i])
+                if bid_loc:
+                    self.tableWidget_Price.update_item_sig.emit(bid_loc, 2, str(price_dict['BidQty'][i]))
+                    bids_loc.append(bid_loc)
+                if ask_loc:
+                    self.tableWidget_Price.update_item_sig.emit(ask_loc, 6, str(price_dict['AskQty'][i]))
+                    asks_loc.append(ask_loc)
+
+            bid_empty_loc = set(self.price_location.values()) - set(bids_loc)
+            ask_empty_loc = set(self.price_location.values()) - set(asks_loc)
+            for n, m in zip(bid_empty_loc, ask_empty_loc):
+                self.tableWidget_Price.update_item_sig.emit(n, 2, '')
+                self.tableWidget_Price.update_item_sig.emit(m, 6, '')
+
+            last1_loc = self.price_location.get(price_dict['Last'][0])
+            bid1_loc = self.price_location.get(price_dict['Bid'][0])
+            ask1_loc = self.price_location.get(price_dict['Ask'][0])
+            color_map = {bid1_loc: '#FF0000', ask1_loc: '#00FF00'}
+            for i in self.price_location.values():
+                color = color_map.get(i, '#FFFFFF')
+                self.tableWidget_Price.item(i, 4).setBackground(QColor(color))
+                if i == last1_loc:
+                    self.tableWidget_Price.item(i, 4).setFont(QFont('Microsoft YaHei', 9, QFont.Bold))
+                else:
+                    self.tableWidget_Price.item(i, 4).setFont(QFont('Microsoft YaHei', 9, QFont.Normal))
+
+                    # if last1_loc == i:
+                    #     self.tableWidget_Price.item(i, 4).setBackground(QColor('#EEEE00'))
+                    # else:
+                    #     self.tableWidget_Price.item(i, 4).setBackground(QColor('#FFFFFF'))
+
+        # ask_bid = ask.reverse().extend(bid)
+        # for i in range(self.tableWidget_Price.rowCount()):
+        #     if self.tableWidget_Price.item(i, 1).text() ==
+
+    def price_info_update(self, price_dict):
+        bid = price_dict['Bid'][0]
+        ask = price_dict['Ask'][0]
+        toler = self.spinBox_toler.value()
+        self.label_long_info.setText(f'@{bid}->{bid + toler}')
+        self.label_short_info.setText(f'@{ask}->{ask - toler}')
+
 
 
 

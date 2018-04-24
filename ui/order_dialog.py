@@ -447,9 +447,9 @@ class Ui_Dialog(object):
         self.label.setAlignment(QtCore.Qt.AlignCenter)
         self.label.setObjectName("label")
         self.horizontalLayout_2.addWidget(self.label)
-        self.comboBox = QtWidgets.QComboBox(Dialog)
-        self.comboBox.setObjectName("comboBox")
-        self.horizontalLayout_2.addWidget(self.comboBox)
+        self.comboBox_account = QtWidgets.QComboBox(Dialog)
+        self.comboBox_account.setObjectName("comboBox_account")
+        self.horizontalLayout_2.addWidget(self.comboBox_account)
         self.verticalLayout.addLayout(self.horizontalLayout_2)
         self.horizontalLayout__ProdCode = QtWidgets.QHBoxLayout()
         self.horizontalLayout__ProdCode.setObjectName("horizontalLayout__ProdCode")
@@ -560,7 +560,7 @@ class Ui_Dialog(object):
         self.label_14.setBuddy(self.spinBox_bullbear_profit)
         self.label_15.setBuddy(self.spinBox_bullbear_loss)
         self.label_16.setBuddy(self.spinBox_bullbear_loss_toler)
-        self.label.setBuddy(self.comboBox)
+        self.label.setBuddy(self.comboBox_account)
         self.label__ProdCode.setBuddy(self.lineEdit_ProdCode)
         self.label_Price.setBuddy(self.spinBox_Price)
         self.label_Qty.setBuddy(self.spinBox_Qty)
@@ -613,7 +613,7 @@ class Ui_Dialog(object):
 
     def retranslateUi(self, Dialog):
         _translate = QtCore.QCoreApplication.translate
-        Dialog.setWindowTitle(_translate("Dialog", "Dialog"))
+        Dialog.setWindowTitle(_translate("Dialog", "SP  ORDER"))
         self.label_Ref.setText(_translate("Dialog", "参考"))
         self.checkBox_OrderOptions.setText(_translate("Dialog", "T+1"))
         self.checkBox_remain_conf.setText(_translate("Dialog", "保持设定"))
