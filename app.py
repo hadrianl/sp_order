@@ -62,7 +62,7 @@ def _update_acc_info(acc_info):
     AccInfo.tableWidget_acc_info.set_item_sig.emit(5, 0, f"{acc_info_dict['MMargin']:,} {base_ccy}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, '')
     AccInfo.tableWidget_acc_info.set_item_sig.emit(7, 0, f"{acc_info_dict['MaxMargin']:,} {base_ccy}")
-    AccInfo.tableWidget_acc_info.set_item_sig.emit(8, 0, acc_info_dict['MarginPeriod'].decode('GBK'))
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(8, 0, acc_info_dict['MarginPeriod'].decode())
     AccInfo.tableWidget_acc_info.set_item_sig.emit(9, 0, f"{acc_info_dict['CashBal']:,} {base_ccy}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(10, 0, f"{acc_info_dict['CreditLimit']:,} {base_ccy}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(11, 0, acc_info_dict['CtrlLevel'].decode())
@@ -396,9 +396,7 @@ def init_spapi():
         info_handle('<连接>', f"设置登录信息-host:{info['host']} port:{info['port']} license:{info['License']} app_id:{info['app_id']} user_id:{info['user_id']}")
         login()
         # win.show()
-        Order.show()
         AccInfo.show()
-        QuickOrder.show()
         import time
         time.sleep(1.5)
         Order.comboBox_account.addItem(info['user_id'])
@@ -484,7 +482,12 @@ if __name__ == '__main__':
                 info_dict[name] = getattr(i, name)
             print(info_dict)
 
-
+    AccInfo.pushButton_Order.released.connect(Order.show)
+    AccInfo.pushButton_QuickOrder.released.connect(QuickOrder.show)
+    Order.lineEdit_ProdCode.textEdited.connect(lambda text: QuickOrder.lineEdit_ProdCode.setText(text))
+    QuickOrder.lineEdit_ProdCode.textEdited.connect(lambda text: Order.lineEdit_ProdCode.setText(text))
+    Order.checkBox_lock.toggled.connect(QuickOrder.checkBox_Lock.setChecked)
+    QuickOrder.checkBox_Lock.toggled.connect(Order.checkBox_lock.setChecked)
     # AccInfo.tabWidget_acc_info.currentChanged.connect(lambda n: info_update[n]())
     AccInfo.pushButton_del_order.released.connect(lambda :_del_current_selected_order())
     AccInfo.pushButton_activate_order.released.connect(lambda :_activate_selected_order())

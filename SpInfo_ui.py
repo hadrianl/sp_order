@@ -5,7 +5,7 @@
 # @File    : Spfunc.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 
-from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidgetItem, QIcon, QSize, QColor, QFont
+from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QSize, QColor, QFont, QRect
 from PyQt5 import QtWidgets, QtCore
 from PyQt5 import QtGui
 import sys
@@ -24,7 +24,6 @@ class OrderDialog(QDialog, Ui_Dialog):
         QDialog.__init__(self, parent)
         Ui_Dialog.__init__(self)
         self.setupUi(self)
-        self._price_flag = True
         self.init_state()
         self.init_signal()
 
@@ -38,8 +37,12 @@ class OrderDialog(QDialog, Ui_Dialog):
         self.spinBox_StopLevel.setSpecialValueText(' ')
         self.spinBox_StopLevel2.setSpecialValueText(' ')
         self.spinBox_oco_StopLevel.setSpecialValueText(' ')
-        desktop = QDesktopWidget()
-        self.move(desktop.width() - self.width(),(desktop.height() - self.height())/2 - 70)
+        self._price_flag = True
+        self._sl_flag = True
+        self._sl2_flag = True
+        self._oco_sl_flag = True
+        # desktop = QDesktopWidget()
+        # self.move(desktop.width() - self.width(),(desktop.height() - self.height())/2 - 70)
         # self.spinBox_Price.set
 
 
@@ -56,7 +59,10 @@ class OrderDialog(QDialog, Ui_Dialog):
                                                             self.pushButton_buy.setHidden(n in [1, 2]),
                                                             self.pushButton_sell.setHidden(n in [1, 2]),
                                                             self.spinBox_Price.setValue(0) if n in [2] else ...,
-                                                            setattr(self, '_price_flag', True)
+                                                            setattr(self, '_price_flag', True),
+                                                            setattr(self, '_sl_flag', True),
+                                                            setattr(self, '_sl2_flag', True),
+                                                            setattr(self, '_oco_sl_flag', True)
                                                             ))
 
         self.comboBox_ValidType.currentIndexChanged.connect(lambda n: (
@@ -88,10 +94,10 @@ class OrderDialog(QDialog, Ui_Dialog):
         self.radioButton_buy2.toggled.connect(lambda x: self.label_oco_pirce.setText(f'{self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()}'))
         self.radioButton_sell1.toggled.connect(lambda x: self.label_oco_pirce.setText(f'{self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()}'))
 
-        self.spinBox_Price.valueChanged.connect(lambda x: (self.spinBox_Price.setValue(30000), setattr(self, '_price_flag', False)) if self._price_flag else ...)
-        self.spinBox_StopLevel.valueChanged.connect(lambda x: (self.spinBox_StopLevel.setValue(30000), setattr(self, '_price_flag', False)) if self._price_flag else ...)
-        self.spinBox_StopLevel2.valueChanged.connect(lambda x: (self.spinBox_StopLevel2.setValue(30000), setattr(self, '_price_flag', False)) if self._price_flag else ...)
-        self.spinBox_oco_StopLevel.valueChanged.connect(lambda x: (self.spinBox_oco_StopLevel.setValue(30000), setattr(self, '_price_flag', False)) if self._price_flag == 1 else ...)
+        self.spinBox_Price.valueChanged.connect(lambda x: (self.spinBox_Price.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_price_flag', False)) if self._price_flag else ...)
+        self.spinBox_StopLevel.valueChanged.connect(lambda x: (self.spinBox_StopLevel.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_sl_flag', False)) if self._sl_flag else ...)
+        self.spinBox_StopLevel2.valueChanged.connect(lambda x: (self.spinBox_StopLevel2.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_sl2_flag', False)) if self._sl2_flag else ...)
+        self.spinBox_oco_StopLevel.valueChanged.connect(lambda x: (self.spinBox_oco_StopLevel.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_oco_sl_flag', False)) if self._oco_sl_flag else ...)
         self.pushButton_buy.released.connect(lambda :self.order('B'))
         self.pushButton_sell.released.connect(lambda :self.order('S'))
         self.checkBox_lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
@@ -102,9 +108,10 @@ class OrderDialog(QDialog, Ui_Dialog):
             order_kwargs = {}
             order_kwargs['BuySell'] = BuySell
             order_kwargs['ProdCode'] = self.lineEdit_ProdCode.text()
+            current_price = get_price_by_code(order_kwargs['ProdCode'])
             order_kwargs['Qty'] = self.spinBox_Qty.value()
             order_kwargs['Ref'] = self.lineEdit_Ref.text()
-            order_kwargs['OrderOption'] = self.checkBox_OrderOptions.checkState()
+            order_kwargs['OrderOptions'] = 1 if self.checkBox_OrderOptions.checkState() else 0
             _condtype_index = self.comboBox_CondType.currentIndex()
             order_kwargs['CondType'] = {0: 0, 1: 1, 2: 4,3: 0, 4: 3}[_condtype_index]
 
@@ -130,7 +137,6 @@ class OrderDialog(QDialog, Ui_Dialog):
                 if self.checkBox_Trailing_Stop.isChecked():
                     order_kwargs['CondType'] = 6
                     order_kwargs['ValidType'] = 0
-                    current_price = get_price_by_code(order_kwargs['ProdCode'])
                     if BuySell == 'B':
                         order_kwargs['UpLevel'] = current_price.Ask[0]
                         order_kwargs['UpPrice'] = order_kwargs['StopLevel']
@@ -171,20 +177,10 @@ class OrderDialog(QDialog, Ui_Dialog):
                 order_kwargs['Price'] = self.spinBox_Price.value()
                 order_kwargs['SchedTime'] = int(self.dateTimeEdit_sched_time.dateTime().toPyDateTime().timestamp())
         except Exception as e:
-            raise e
-        add_order(**order_kwargs)
-
-    def closeEvent(self, a0: QtGui.QCloseEvent):
-        reply = QtWidgets.QMessageBox.question(self, '退出', "是否要退出SP下单？",
-                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                                               QtWidgets.QMessageBox.No)
-        if reply == QtWidgets.QMessageBox.Yes:
-            a0.accept()
-            # pid = os.getpid()
-            # os.system(f'taskkill /F /PID {pid}')
+            print(e)
+            # raise e
         else:
-            a0.ignore()
-
+            add_order(**order_kwargs)
 
 class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
     def __init__(self, parent=None):
@@ -193,6 +189,17 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.setupUi(self)
         desktop = QDesktopWidget()
         self.move(desktop.width() - self.width(), (desktop.height() + self.height()) / 2)
+
+    def closeEvent(self, a0: QtGui.QCloseEvent):
+        reply = QtWidgets.QMessageBox.question(self, '退出', "是否要退出SP下单？",
+                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                                               QtWidgets.QMessageBox.No)
+        if reply == QtWidgets.QMessageBox.Yes:
+            a0.accept()
+            pid = os.getpid()
+            os.system(f'taskkill /F /PID {pid}')
+        else:
+            a0.ignore()
 
 
 
@@ -230,6 +237,9 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
         self.tableWidget_Price.setColumnWidth(4, 70)
         self.tableWidget_Price.setColumnWidth(5, 30)
         self.tableWidget_Price.setColumnWidth(8, 30)
+        desktop = QDesktopWidget()
+        self.move(desktop.width() - self.width(), 0)
+        self.tableWidget_Price.setSelectionMode(QTableWidget.SingleSelection)
 
         self.init_signal()
         self._price_active = False
@@ -240,36 +250,76 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
             order_kwargs['ProdCode'] = self.lineEdit_ProdCode.text()
             order_kwargs['BuySell'] = BuySell
             order_kwargs['Qty'] = self.spinBox_Qty.value()
-            order_kwargs['OrderOption'] = self.checkBox_OrderOptions.checkState()
+            order_kwargs['OrderOptions'] = self.checkBox_OrderOptions.checkState()
             order_kwargs['ValidType'] = self.comboBox_VaildType.currentIndex()
             order_kwargs['CondType'] = 0
             order_kwargs['Price'] = Price
         except Exception as e:
             raise e
-        add_order(**order_kwargs)
+        print(order_kwargs)
+        # add_order(**order_kwargs)
 
     def init_signal(self):
-        self.checkBox_Lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
-        self.pushButton_price_to_middle.released.connect(lambda :self.adjust_ui(20))
+        # self.checkBox_Lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
+        self.pushButton_price_to_middle.released.connect(lambda :self.adjust_ui(25))
+        self.tableWidget_Price.itemDoubleClicked.connect(lambda i: self.doubleclick_order(i.row(), i.column()))
+        self.pushButton_long.released.connect(lambda :self.addition_toler_order('B'))
+        self.pushButton_short.released.connect(lambda: self.addition_toler_order('S'))
 
 
     def adjust_ui(self, n):
-        last_price = get_price_by_code(self.lineEdit_ProdCode.text()).Last[0]
-        Price = range(int(last_price + n), int(last_price - n), -1)
-        self.tableWidget_Price.clearContents()
-        self.tableWidget_Price.setRowCount(len(Price))
-        self.price_location = {}
-        a=QIcon(os.path.join('ui', 'addorder.png'))
-        for i, p in enumerate(Price):
-            self.price_location[p] = i
-            self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 0, QIcon(os.path.join('ui', 'deleteorder.png')))
-            self.tableWidget_Price.set_item_sig.emit(i, 2, '')
-            self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 3, QIcon(os.path.join('ui', 'addorder.png')))
-            self.tableWidget_Price.set_item_sig.emit(i, 4, str(p))
-            self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 5, QIcon(os.path.join('ui', 'addorder.png')))
-            self.tableWidget_Price.set_item_sig.emit(i, 6, '')
-            self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 8, QIcon(os.path.join('ui', 'deleteorder.png')))
-        self._price_active = True
+        try:
+            last_price = get_price_by_code(self.lineEdit_ProdCode.text()).Last[0]
+        except Exception as e:
+            print(e)
+        else:
+            Price = range(int(last_price + n), int(last_price - n), -1)
+            self.tableWidget_Price.clearContents()
+            self.tableWidget_Price.setRowCount(len(Price))
+            self.price_location = {}
+            for i, p in enumerate(Price):
+                self.price_location[p] = i
+                self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 0, QIcon(os.path.join('ui', 'deleteorder.png')))
+                self.tableWidget_Price.set_item_sig.emit(i, 2, '')
+                self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 3, QIcon(os.path.join('ui', 'addorder.png')))
+                self.tableWidget_Price.set_item_sig.emit(i, 4, str(p))
+                self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 5, QIcon(os.path.join('ui', 'addorder.png')))
+                self.tableWidget_Price.set_item_sig.emit(i, 6, '')
+                self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 8, QIcon(os.path.join('ui', 'deleteorder.png')))
+            self._price_active = True
+            m = self.tableWidget_Price.verticalScrollBar().maximum() // 2
+            self.tableWidget_Price.verticalScrollBar().setValue(m)
+            self.working_order_update()
+            # self.tableWidget_Price.selectRow(self.tableWidget_Price.currentRow()-3)
+            # self.tableWidget_Price.verticalScrollBar().
+
+    def working_order_update(self):
+        orders = get_orders_by_array()
+        bid_qty_loc = []
+        ask_qty_loc =[]
+        for order in orders:
+            price_loc = self.price_location.get(order.Price)
+            print(price_loc)
+            print(order.Qty)
+            if (order.BuySell.decode() == 'B')&price_loc:
+                origin_qty = self.tableWidget_Price.item(price_loc, 1).text()
+                if origin_qty:
+                    self.tableWidget_Price.set_item_sig.emit(price_loc, 1, str(order.Qty + int(origin_qty)))
+                else:
+                    self.tableWidget_Price.set_item_sig.emit(price_loc, 1, str(order.Qty))
+                bid_qty_loc.append(price_loc)
+            elif (order.BuySell.decode() == 'S')&price_loc:
+                origin_qty = self.tableWidget_Price.item(price_loc, 7).text()
+                if origin_qty:
+                    self.tableWidget_Price.set_item_sig.emit(price_loc, 7, str(order.Qty + int(origin_qty)))
+                else:
+                    self.tableWidget_Price.set_item_sig.emit(price_loc, 7, str(order.Qty))
+                ask_qty_loc.append(price_loc)
+
+        for i in set(self.price_location.values()) - set(bid_qty_loc):
+            self.tableWidget_Price.set_item_sig.emit(i, 1, '')
+        for i in set(self.price_location.values()) - set(ask_qty_loc):
+            self.tableWidget_Price.set_item_sig.emit(i, 7, '')
 
     def price_table_update(self, price_dict):
         bids_loc = []
@@ -306,21 +356,36 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
                 else:
                     self.tableWidget_Price.item(i, 4).setFont(QFont('Microsoft YaHei', 9, QFont.Normal))
 
-                    # if last1_loc == i:
-                    #     self.tableWidget_Price.item(i, 4).setBackground(QColor('#EEEE00'))
-                    # else:
-                    #     self.tableWidget_Price.item(i, 4).setBackground(QColor('#FFFFFF'))
-
-        # ask_bid = ask.reverse().extend(bid)
-        # for i in range(self.tableWidget_Price.rowCount()):
-        #     if self.tableWidget_Price.item(i, 1).text() ==
-
     def price_info_update(self, price_dict):
         bid = price_dict['Bid'][0]
         ask = price_dict['Ask'][0]
         toler = self.spinBox_toler.value()
         self.label_long_info.setText(f'@{bid}->{bid + toler}')
         self.label_short_info.setText(f'@{ask}->{ask - toler}')
+
+    def doubleclick_order(self, row, column):
+        price = float(self.tableWidget_Price.item(row, 4).text())
+        if column == 3:
+            buysell = 'B'
+            self.order(buysell, price)
+        elif column == 5:
+            buysell = 'S'
+            self.order(buysell, price)
+
+    def addition_toler_order(self, buysell):
+        try:
+            price = get_price_by_code(self.lineEdit_ProdCode.text())
+        except Exception as e:
+            print(e)
+        else:
+            if buysell == 'B':
+                bid = price.Bid[0]
+                limit_price = bid + self.spinBox_toler.value()
+            elif buysell =='S':
+                ask = price.Ask[0]
+                limit_price = ask - self.spinBox_toler.value()
+            self.order(buysell, limit_price)
+
 
 
 

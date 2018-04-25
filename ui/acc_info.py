@@ -62,6 +62,15 @@ class Ui_Form_acc_info(object):
         self.verticalLayout_3.setObjectName("verticalLayout_3")
         self.horizontalLayout = QtWidgets.QHBoxLayout()
         self.horizontalLayout.setObjectName("horizontalLayout")
+        self.horizontalLayout_11 = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_11.setObjectName("horizontalLayout_11")
+        self.pushButton_Order = QtWidgets.QPushButton(Form_acc_info)
+        self.pushButton_Order.setObjectName("pushButton_Order")
+        self.horizontalLayout_11.addWidget(self.pushButton_Order)
+        self.pushButton_QuickOrder = QtWidgets.QPushButton(Form_acc_info)
+        self.pushButton_QuickOrder.setObjectName("pushButton_QuickOrder")
+        self.horizontalLayout_11.addWidget(self.pushButton_QuickOrder)
+        self.horizontalLayout.addLayout(self.horizontalLayout_11)
         spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.horizontalLayout.addItem(spacerItem)
         self.toolButton_update_info = QtWidgets.QToolButton(Form_acc_info)
@@ -294,7 +303,7 @@ class Ui_Form_acc_info(object):
         self.horizontalLayout_10.addLayout(self.horizontalLayout_9)
 
         self.retranslateUi(Form_acc_info)
-        self.tabWidget_acc_info.setCurrentIndex(4)
+        self.tabWidget_acc_info.setCurrentIndex(0)
         QtCore.QMetaObject.connectSlotsByName(Form_acc_info)
 
     def retranslateUi(self, Form_acc_info):
@@ -328,6 +337,8 @@ class Ui_Form_acc_info(object):
         item.setText(_translate("Form_acc_info", "保证金类别"))
         item = self.tableWidget_acc_info.verticalHeaderItem(13)
         item.setText(_translate("Form_acc_info", "经纪"))
+        self.pushButton_Order.setText(_translate("Form_acc_info", "下单"))
+        self.pushButton_QuickOrder.setText(_translate("Form_acc_info", "快速点击下单"))
         self.pushButton_del_order.setText(_translate("Form_acc_info", "删除"))
         self.pushButton_activate_order.setText(_translate("Form_acc_info", "生效"))
         self.pushButton_inactivate_order.setText(_translate("Form_acc_info", "无效"))
