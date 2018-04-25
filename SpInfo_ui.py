@@ -250,7 +250,7 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
             order_kwargs['ProdCode'] = self.lineEdit_ProdCode.text()
             order_kwargs['BuySell'] = BuySell
             order_kwargs['Qty'] = self.spinBox_Qty.value()
-            order_kwargs['OrderOptions'] = self.checkBox_OrderOptions.checkState()
+            order_kwargs['OrderOptions'] = 1 if self.checkBox_OrderOptions.checkState() else 0
             order_kwargs['ValidType'] = self.comboBox_VaildType.currentIndex()
             order_kwargs['CondType'] = 0
             order_kwargs['Price'] = Price
