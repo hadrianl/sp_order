@@ -5,19 +5,18 @@
 # @File    : app.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 
-from PyQt5.QtWidgets import QApplication, QMessageBox, QTableWidgetItem, QDesktopWidget, QMainWindow
-from SpInfo_ui import SpLoginDialog, OrderDialog, AccInfoWidget, QuickOrderWidget
-import sys
+from PyQt5.QtWidgets import QApplication, QTableWidgetItem, QMessageBox
+from SpInfo_ui import SpLoginDialog, AccInfoWidget
 from spapi.spAPI import *
 import datetime as dt
 from spapi.conf.util import ORDER_STATUS
 import pickle
-from ui.baseitems import QPriceUpdate
-from PyQt5.Qt import QObject
-from PyQt5.QtCore import pyqtSignal
+from threading import Lock
+
 
 
 local_login = False
+lock = Lock()
 def addOrder(**kwargs):
     if local_login:
         add_order(**kwargs)
@@ -27,17 +26,19 @@ def addOrder(**kwargs):
 def info_handle(type, info, info_struct=None, handle_type=0):
     if handle_type == 0:
         print('*LOCAL*' + type + info)
+        try:
+            is_struct = map(lambda x: isinstance(info_struct, x),
+                            [SPApiOrder, SPApiPos, SPApiTrade, SPApiAccBal, SPApiAccInfo])
+            update_func = [_update_order, _update_postion, _update_trade, _update_accbals, _update_acc_info]
+            for b, f in zip(is_struct, update_func):
+                if b:
+                    f(info_struct)
+        except Exception as e:
+            print(e)
+
     elif handle_type == 1:
         print('*LOCAL*' + type + info)
-    try:
-        is_struct = map(lambda x: isinstance(info_struct, x),
-                     [SPApiOrder, SPApiPos, SPApiTrade, SPApiAccBal, SPApiAccInfo])
-        update_func = [_update_order, _update_postion, _update_trade, _update_accbals, _update_acc_info]
-        for b, f in zip(is_struct, update_func):
-            if b:
-                f(info_struct)
-    except Exception as e:
-        print(e)
+        AccInfo.message_sig.emit('WARNING', info_struct.decode('GBK'))
 
 def update_acc_info():
     try:
@@ -60,14 +61,19 @@ def _update_acc_info(acc_info):
     AccInfo.tableWidget_acc_info.set_item_sig.emit(3, 0, f"{acc_info_dict['CommodityPL']:,} {base_ccy}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(4, 0, f"{acc_info_dict['IMargin']:,} {base_ccy}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(5, 0, f"{acc_info_dict['MMargin']:,} {base_ccy}")
-    AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, '')
+    try:
+        MarginLevel = (acc_info_dict['CashBal'] + acc_info_dict['CommodityPL'] + acc_info_dict['CommodityPL']) / acc_info_dict['IMargin']
+        AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, f'{MarginLevel:.2%}')
+    except ZeroDivisionError:
+        AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, '-')
     AccInfo.tableWidget_acc_info.set_item_sig.emit(7, 0, f"{acc_info_dict['MaxMargin']:,} {base_ccy}")
-    AccInfo.tableWidget_acc_info.set_item_sig.emit(8, 0, acc_info_dict['MarginPeriod'].decode())
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(8, 0, f"{ord(acc_info_dict['MarginPeriod'])}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(9, 0, f"{acc_info_dict['CashBal']:,} {base_ccy}")
     AccInfo.tableWidget_acc_info.set_item_sig.emit(10, 0, f"{acc_info_dict['CreditLimit']:,} {base_ccy}")
-    AccInfo.tableWidget_acc_info.set_item_sig.emit(11, 0, acc_info_dict['CtrlLevel'].decode())
-    AccInfo.tableWidget_acc_info.set_item_sig.emit(12, 0, acc_info_dict['MarginClass'].decode())
-    AccInfo.tableWidget_acc_info.set_item_sig.emit(13, 0, acc_info_dict['AEId'].decode())
+    ctrllevel_dict ={0: '正常', 1: '停止交易', 2: '暂停', 3: '冻结户口' }
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(11, 0, f"{ctrllevel_dict[ord(acc_info_dict['CtrlLevel'])]}")
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(12, 0, acc_info_dict['MarginClass'].decode('GBK'))
+    AccInfo.tableWidget_acc_info.set_item_sig.emit(13, 0, acc_info_dict['AEId'].decode('GBK'))
     print('acc_info:', acc_info_dict)
     return acc_info_dict
 
@@ -91,6 +97,8 @@ def _update_order(o):
     for name, c_type in o._fields_:
         order_dict[name] = getattr(o, name)
     r = 0
+
+
     for i in range(AccInfo.tableWidget_orders.rowCount()):
         if order_dict['IntOrderNo'] == int(AccInfo.tableWidget_orders.item(i, 0).text()):
             r = i
@@ -98,22 +106,26 @@ def _update_order(o):
     else:
         AccInfo.tableWidget_orders.insertRow(0)
 
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 0, str(order_dict['IntOrderNo']))
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 1, order_dict['ProdCode'].decode())
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 2, '')
-    if order_dict['BuySell'].decode() == 'B':
-        AccInfo.tableWidget_orders.set_item_sig.emit(r, 3, str(order_dict['Qty']))
-    else:
-        AccInfo.tableWidget_orders.set_item_sig.emit(r, 4, str(order_dict['Qty']))
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 5, f"{order_dict['Price']:,}")
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 6, str(dt.datetime.fromtimestamp(order_dict['ValidTime'])))
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 7, '')
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 8, ORDER_STATUS[order_dict['Status']])
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 9, str(order_dict['TradedQty']))
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 10, str(order_dict['Initiator'].decode()))
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 11, order_dict['Ref'].decode('GBK'))
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 12, str(dt.datetime.fromtimestamp(order_dict['TimeStamp'])))
-    AccInfo.tableWidget_orders.set_item_sig.emit(r, 13, str(order_dict['ExtOrderNo']))
+    order_info = [order_dict['IntOrderNo'],
+                  order_dict['ProdCode'].decode(),
+                  '',
+                  order_dict['Qty'] if order_dict['BuySell'].decode() == 'B' else '',
+                  order_dict['Qty'] if order_dict['BuySell'].decode() == 'S' else '',
+                  f"{order_dict['Price']:,}",
+                  dt.datetime.fromtimestamp(order_dict['ValidTime']),
+                  '',
+                  ORDER_STATUS[order_dict['Status']],
+                  order_dict['TradedQty'],
+                  order_dict['Initiator'].decode(),
+                  order_dict['Ref'].decode('GBK'),
+                  dt.datetime.fromtimestamp(order_dict['TimeStamp']),
+                  order_dict['ExtOrderNo']]
+
+    for i, s in zip(range(14), map(str, order_info)):
+        AccInfo.tableWidget_orders.set_item_sig.emit(r, i, s)
+
+    if order_dict['Status'] in [10]:
+        AccInfo.tableWidget_orders.removeRow(r)
     print('order:', order_dict)
     return order_dict
 
@@ -143,22 +155,26 @@ def _update_postion(p):
     else:
         AccInfo.tableWidget_pos.insertRow(0)
 
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 0, pos_dict['ProdCode'].decode())
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 1, '')
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 2, str(pos_dict['Qty']))
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 3, str(pos_dict['DepQty']))
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 4, f"{pos_dict['LongQty']}@{(pos_dict['LongTotalAmt']/pos_dict['LongQty']):,.2f}")
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 5, f"{-pos_dict['ShortQty']}@{(pos_dict['ShortTotalAmt']/pos_dict['ShortQty']):,.2f}")
     net_pos = pos_dict['LongQty'] - pos_dict['ShortQty']
     net_pos_amt = pos_dict['LongTotalAmt'] - pos_dict['ShortTotalAmt']
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 6, str(net_pos))
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 7, f"{net_pos}@{net_pos_amt/(1 if net_pos==0 else net_pos):,.2f}")
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 8, '')
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 9, f"{pos_dict['PL']:,}")
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 10, )
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 11, f"{pos_dict['ExchangeRate']:,}")
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 12, f"{pos_dict['PLBaseCcy']:,}")
-    AccInfo.tableWidget_pos.set_item_sig.emit(r, 13, )
+    pos_info = [pos_dict['ProdCode'].decode(),
+                '',
+                pos_dict['Qty'],
+                pos_dict['DepQty'],
+                f"{pos_dict['LongQty']}@{(pos_dict['LongTotalAmt']/pos_dict['LongQty']):,.2f}",
+                f"{-pos_dict['ShortQty']}@{(pos_dict['ShortTotalAmt']/pos_dict['ShortQty']):,.2f}",
+                net_pos,
+                f"{net_pos}@{net_pos_amt/(1 if net_pos==0 else net_pos):,.2f}",
+                '',
+                f"{pos_dict['PL']:,}",
+                '',
+                f"{pos_dict['ExchangeRate']:,}",
+                f"{pos_dict['PLBaseCcy']:,}",
+                '']
+
+    for i, s in zip(range(14), map(str, pos_info)):
+        AccInfo.tableWidget_pos.set_item_sig.emit(r, i, s)
+
     print('pos:', pos_dict)
     return pos_dict
 
@@ -190,22 +206,24 @@ def _update_trade(t):
     else:
         AccInfo.tableWidget_trades.insertRow(0)
 
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 0, trade_dict['ProdCode'].decode())
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 1, '')
-    if trade_dict['BuySell'].decode() == 'B':
-        AccInfo.tableWidget_trades.set_item_sig.emit(r, 2, str(trade_dict['Qty']))
-    else:
-        AccInfo.tableWidget_trades.set_item_sig.emit(r, 3, str(trade_dict['Qty']))
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 4, f"{trade_dict['AvgPrice']:,}")
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 5, str(trade_dict['TradeNo']))
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 6, ORDER_STATUS[trade_dict['Status']])
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 7, str(trade_dict['Initiator'].decode()))
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 8, str(trade_dict['Ref'].decode()))
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 9, str(dt.datetime.fromtimestamp(trade_dict['TradeTime'])))
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 10, f"{trade_dict['OrderPrice']:,}")
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 11, str(trade_dict['IntOrderNo']))
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 12, str(trade_dict['ExtOrderNo']))
-    AccInfo.tableWidget_trades.set_item_sig.emit(r, 13, str(trade_dict['RecNO']))
+    trade_info = [trade_dict['ProdCode'].decode(),
+                  '',
+                  trade_dict['Qty'] if trade_dict['BuySell'].decode() == 'B' else '',
+                  trade_dict['Qty'] if trade_dict['BuySell'].decode() == 'S' else '',
+                  f"{trade_dict['AvgPrice']:,}",
+                  trade_dict['TradeNo'],
+                  ORDER_STATUS[trade_dict['Status']],
+                  trade_dict['Initiator'].decode(),
+                  trade_dict['Ref'].decode(),
+                  dt.datetime.fromtimestamp(trade_dict['TradeTime']),
+                  f"{trade_dict['OrderPrice']:,}",
+                  trade_dict['IntOrderNo'],
+                  trade_dict['ExtOrderNo'],
+                  trade_dict['RecNO']]
+
+    for i, s in zip(range(14), map(str, trade_info)):
+        AccInfo.tableWidget_trades.set_item_sig.emit(r, i, s)
+
     print('trade:', trade_dict)
     return trade_dict
 
@@ -235,20 +253,20 @@ def _update_accbals(b):
             break
     else:
         AccInfo.tableWidget_bal.insertRow(0)
-
-    AccInfo.tableWidget_bal.set_item_sig.emit(r, 0, accbal_dict['Ccy'].decode())
-    AccInfo.tableWidget_bal.set_item_sig.emit(r, 1, f"{accbal_dict['CashBF']:,}")
-    AccInfo.tableWidget_bal.set_item_sig.emit(r, 2, f"{accbal_dict['NotYetValue']:,}")
-    AccInfo.tableWidget_bal.set_item_sig.emit(r, 3, f"{accbal_dict['TodayCash']:,}")
     total_cash = accbal_dict['CashBF'] + accbal_dict['NotYetValue'] + accbal_dict['TodayCash']
-    AccInfo.tableWidget_bal.set_item_sig.emit(r, 4, str(total_cash))
-    AccInfo.tableWidget_bal.set_item_sig.emit(r, 5, f"{accbal_dict['Unpresented']:,}")
     ccy = get_ccy_rate_by_ccy(accbal_dict['Ccy'].decode()).value
-    AccInfo.tableWidget_bal.set_item_sig.emit(r, 6, str(ccy))
-    AccInfo.tableWidget_bal.set_item_sig.emit(r, 7, f"{total_cash * ccy:,}")
-    # b['Todayout']
-    AccInfo.tableWidget_bal.repaint()
-    AccInfo.tableWidget_bal.update()
+    bal_info = [accbal_dict['Ccy'].decode(),
+                f"{accbal_dict['CashBF']:,}",
+                f"{accbal_dict['NotYetValue']:,}",
+                f"{accbal_dict['TodayCash']:,}",
+                total_cash,
+                f"{accbal_dict['Unpresented']:,}",
+                ccy,
+                f"{total_cash * ccy:,}"]
+
+    for i, s in zip(range(8), map(str, bal_info)):
+        AccInfo.tableWidget_bal.set_item_sig.emit(r, i, s)
+
     print('accbal:', accbal_dict)
     return accbal_dict
 
@@ -281,7 +299,7 @@ def account_info_push(acc_info):
 @on_load_trade_ready_push  # 登入后，登入前已存的成交信息推送
 def trade_ready_push(rec_no, trade):
     info_handle('<成交>',
-                f'历史成交记录--NO:{rec_no}--{trade.OpenClose.decode()}成交@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}')
+                f'历史成交记录--NO:{rec_no}--{trade.OpenClose.decode()}成交@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}', trade)
 
 @on_account_position_push  # 普通客户登入后返回登入前的已存在持仓信息
 def account_position_push(pos):
@@ -316,9 +334,13 @@ def price_update(price):
     for name, c_type in price._fields_:
         price_dict[name] = getattr(price, name)
 
-    qprice.price_update_sig.emit(price_dict)
+    AccInfo.qprice.price_update_sig.emit(price_dict)
     # AccInfo.tableWidget_acc_info.item(6, 0).setText()
-    AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, str(price.Bid[0]))
+    for t in range(AccInfo.tableWidget_pos.rowCount()):
+        if price_dict['ProdCode'].decode() == AccInfo.tableWidget_pos.item(t, 0).text():
+            AccInfo.tableWidget_pos.update_item_sig.emit(t, 8, str(price_dict['Last'][0]))
+            # app.processEvents()
+    # AccInfo.tableWidget_acc_info.set_item_sig.emit(6, 0, str(price.Bid[0]))
 # # -------------------------------------------------------------------------------------------------------------------------------------------------------
 
 @on_connecting_reply  # 连接状态改变时调用
@@ -328,7 +350,7 @@ def connecting_reply(host_id, con_status):
 # -----------------------------------------------登入后的新信息回调------------------------------------------------------------------------------
 @on_order_request_failed  # 订单请求失败时候调用
 def order_request_failed(action, order, err_code, err_msg):
-    info_handle('<订单>', f'请求失败--ACTION:{action}-@{order.ProdCode.decode()}-Price:{order.Price}-Qty:{order.Qty}-BuySell:{order.BuySell.decode()}      errcode;{err_code}-errmsg:{err_msg.decode()}')
+    info_handle('<订单>', f'请求失败--ACTION:{action}-@{order.ProdCode.decode()}-Price:{order.Price}-Qty:{order.Qty}-BuySell:{order.BuySell.decode()}      errcode;{err_code}-errmsg:{err_msg.decode()}',err_msg, 1)
 
 @on_order_before_send_report  # 订单发送前调用
 def order_before_snd_report(order):
@@ -396,13 +418,11 @@ def init_spapi():
         info_handle('<连接>', f"设置登录信息-host:{info['host']} port:{info['port']} license:{info['License']} app_id:{info['app_id']} user_id:{info['user_id']}")
         login()
         # win.show()
-        AccInfo.show()
+        AccInfo.bind_account(info['user_id'])
         import time
         time.sleep(1.5)
-        Order.comboBox_account.addItem(info['user_id'])
         AccInfo.toolButton_update_info.released.emit()
-        # load_instrument_list()
-        # load_productinfolist_by_code('HSI')
+        AccInfo.show()
         # get_instrument_by_code('HSI')
         # print(get_product_by_array())
         # get_product_info('HSIJ8')
@@ -427,7 +447,7 @@ def get_product_info(code):
         print(product_info)
     except Exception as e:
         print(e)
-        Order.checkBox_lock.setChecked(False)
+        AccInfo.Order.checkBox_lock.setChecked(False)
 
 def __get_current_order_info():
     row = AccInfo.tableWidget_orders.currentRow()
@@ -464,17 +484,14 @@ def addOrder(**kwargs):
         add_order(**kwargs)
     else:
         print('未登录：', kwargs)
-if __name__ == '__main__':
+
+def main():
     app = QApplication(sys.argv)
     # win = QMainWindow()
     Login = SpLoginDialog()
-    Order = OrderDialog()
     AccInfo = AccInfoWidget()
-    qprice = QPriceUpdate()
-    QuickOrder = QuickOrderWidget()
+
     Login.accepted.connect(lambda :init_spapi())
-    qprice.price_update_sig.connect(QuickOrder.price_table_update)
-    qprice.price_update_sig.connect(QuickOrder.price_info_update)
     def print_info(info_array):
         info_dict = {}
         for i in info_array:
@@ -482,12 +499,35 @@ if __name__ == '__main__':
                 info_dict[name] = getattr(i, name)
             print(info_dict)
 
-    AccInfo.pushButton_Order.released.connect(Order.show)
-    AccInfo.pushButton_QuickOrder.released.connect(QuickOrder.show)
-    Order.lineEdit_ProdCode.textEdited.connect(lambda text: QuickOrder.lineEdit_ProdCode.setText(text))
-    QuickOrder.lineEdit_ProdCode.textEdited.connect(lambda text: Order.lineEdit_ProdCode.setText(text))
-    Order.checkBox_lock.toggled.connect(QuickOrder.checkBox_Lock.setChecked)
-    QuickOrder.checkBox_Lock.toggled.connect(Order.checkBox_lock.setChecked)
+    # AccInfo.tabWidget_acc_info.currentChanged.connect(lambda n: info_update[n]())
+    AccInfo.pushButton_del_order.released.connect(lambda :_del_current_selected_order())
+    AccInfo.pushButton_activate_order.released.connect(lambda :_activate_selected_order())
+    AccInfo.pushButton_inactivate_order.released.connect(lambda :_inactivate_selected_order())
+    AccInfo.pushButton_del_all_orders.released.connect(lambda :delete_all_orders())
+    AccInfo.pushButton_activate_all_orders.released.connect(lambda :activate_all_orders())
+    AccInfo.pushButton_inactivate_all_orders.released.connect(lambda :inactivate_all_orders())
+    AccInfo.pushButton_inactivate_order.released.connect(lambda :print(AccInfo.tableWidget_orders.item(AccInfo.tableWidget_orders.currentRow(), 0).text()))
+    AccInfo.toolButton_update_info.released.connect(lambda :[func() for func in info_update])
+
+    Login.lineEdit_password.setFocus()
+    Login.show()
+    sys.exit(app.exec_())
+
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    # win = QMainWindow()
+    Login = SpLoginDialog()
+    AccInfo = AccInfoWidget()
+
+    Login.accepted.connect(lambda :init_spapi())
+    def print_info(info_array):
+        info_dict = {}
+        for i in info_array:
+            for name, c_type in i._fields_:
+                info_dict[name] = getattr(i, name)
+            print(info_dict)
+
     # AccInfo.tabWidget_acc_info.currentChanged.connect(lambda n: info_update[n]())
     AccInfo.pushButton_del_order.released.connect(lambda :_del_current_selected_order())
     AccInfo.pushButton_activate_order.released.connect(lambda :_activate_selected_order())

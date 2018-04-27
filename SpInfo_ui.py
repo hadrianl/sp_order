@@ -5,18 +5,23 @@
 # @File    : Spfunc.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 
-from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QSize, QColor, QFont, QRect
+from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QSize, QColor, QFont, QRect, QMessageBox,pyqtSignal
 from PyQt5 import QtWidgets, QtCore
 from PyQt5 import QtGui
 import sys
 from ui.order_dialog import Ui_Dialog
 from ui.acc_info import Ui_Form_acc_info
 from ui.sp_login import Ui_Dialog_sp_login
+from ui.order_comfirm_dialog import Ui_Dialog_order_comfirm
+from ui.baseitems import QPriceUpdate
 import datetime as dt
 from spapi.spAPI import *
+from spapi.conf.util import ORDER_VALIDTYPE
 import os
 import pickle
 from ui.quick_order import Ui_Form_quick_order
+import datetime as dt
+import time
 # from sp_func.local import addOrder
 
 class OrderDialog(QDialog, Ui_Dialog):
@@ -100,7 +105,7 @@ class OrderDialog(QDialog, Ui_Dialog):
         self.spinBox_oco_StopLevel.valueChanged.connect(lambda x: (self.spinBox_oco_StopLevel.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_oco_sl_flag', False)) if self._oco_sl_flag else ...)
         self.pushButton_buy.released.connect(lambda :self.order('B'))
         self.pushButton_sell.released.connect(lambda :self.order('S'))
-        self.checkBox_lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
+        # self.checkBox_lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
 
 
     def order(self, BuySell):
@@ -114,12 +119,15 @@ class OrderDialog(QDialog, Ui_Dialog):
             order_kwargs['OrderOptions'] = 1 if self.checkBox_OrderOptions.checkState() else 0
             _condtype_index = self.comboBox_CondType.currentIndex()
             order_kwargs['CondType'] = {0: 0, 1: 1, 2: 4,3: 0, 4: 3}[_condtype_index]
-
+            _stoptype_text = {'L': '损>=' if order_kwargs['BuySell'] == 'B' else '损<=',
+                              'U': '升>=',
+                              'D': '跌<='}
             if _condtype_index == 0:
                 _order_type = (self.checkBox_Auction.checkState() << 1) + self.checkBox_Market.checkState()
                 order_kwargs['OrderType'] = {0: 0, 2: 6, 4: 2}[_order_type]
                 order_kwargs['Price'] = {0: self.spinBox_Price.value(), 2: 0, 4: 0x7fffffff}[_order_type]
                 order_kwargs['ValidType'] = self.comboBox_ValidType.currentIndex()
+                cond = ''
                 if order_kwargs['ValidType'] == 4:
                     order_kwargs['ValidTime'] = int(dt.datetime.strptime(self.dateEdit_ValidTime.date().toPyDate().strftime('%Y/%m/%d'),
                                                          '%Y/%m/%d').timestamp())
@@ -127,34 +135,42 @@ class OrderDialog(QDialog, Ui_Dialog):
                     order_kwargs['StopType'] = {0: 'L', 1: 'U', 2: 'D', 3: 'L'}[self.comboBox_StopType.currentIndex()]
                     order_kwargs['StopLevel'] = self.spinBox_StopLevel.value()
                     order_kwargs['CondType'] = 1
+                    cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}"
+
                 else:
                     order_kwargs['StopLevel'] = 0
             elif _condtype_index == 1:
                 order_kwargs['StopType'] = 'L'
+                order_kwargs['ValidType'] = 0
                 order_kwargs['Price'] = (self.spinBox_StopLevel2.value() + self.spinBox_toler.value()) if BuySell == 'B' \
                     else (self.spinBox_StopLevel2.value() - self.spinBox_toler.value())
                 order_kwargs['StopLevel'] = self.spinBox_StopLevel2.value()
+                cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}"
                 if self.checkBox_Trailing_Stop.isChecked():
                     order_kwargs['CondType'] = 6
-                    order_kwargs['ValidType'] = 0
+
                     if BuySell == 'B':
                         order_kwargs['UpLevel'] = current_price.Ask[0]
                         order_kwargs['UpPrice'] = order_kwargs['StopLevel']
                         order_kwargs['DownLevel'] = self.spinBox_trailing_stop_step.value()
+                        cond = cond + f"（追<={order_kwargs['UpLevel'] - order_kwargs['DownLevel']})"
                     else:
                         order_kwargs['DownLevel'] = current_price.Bid[0]
                         order_kwargs['DownPrice'] = order_kwargs['StopLevel']
                         order_kwargs['UpLevel'] = self.spinBox_trailing_stop_step.value()
+                        cond = cond + f"（追>={order_kwargs['DownLevel'] + order_kwargs['UpLevel']})"
             elif _condtype_index == 2:
                 order_kwargs['ValidType'] = 0
                 order_kwargs['Price'] = self.spinBox_Price.value()
                 if BuySell == 'B':
                     order_kwargs['UpLevel'] = self.spinBox_oco_StopLevel.value()
                     order_kwargs['UpPrice'] = self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()
+                    cond = f"双向 损:{order_kwargs['UpPrice']}(>={order_kwargs['UpLevel']})"
                 else:
                     order_kwargs['DownLevel'] = self.spinBox_oco_StopLevel.value()
                     order_kwargs['DownPrice'] = self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()
-                ...
+                    cond = f"双向 损:{order_kwargs['DownPrice']}(<={order_kwargs['DownLevel']})"
+
             elif _condtype_index == 3:
                 order_kwargs['ValidType'] = 0
                 _profit = self.spinBox_bullbear_profit.value()
@@ -166,29 +182,74 @@ class OrderDialog(QDialog, Ui_Dialog):
                     order_kwargs['UpPrice'] = Price + _profit
                     order_kwargs['DownLevel'] = Price - _loss
                     order_kwargs['DownPrice'] = Price - _loss - _loss_toler
+                    cond = f"牛市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
                 else:
                     order_kwargs['DownLevel'] = Price - _profit
                     order_kwargs['DownPrice'] = Price - _profit
                     order_kwargs['UpLevel'] = Price + _loss
                     order_kwargs['UpPrice'] = Price + _loss + _loss_toler
-                ...
+                    cond = f"熊市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
+
             elif _condtype_index == 4:
                 order_kwargs['ValidType'] = 0
                 order_kwargs['Price'] = self.spinBox_Price.value()
-                order_kwargs['SchedTime'] = int(self.dateTimeEdit_sched_time.dateTime().toPyDateTime().timestamp())
+                _sched_time = self.dateTimeEdit_sched_time.dateTime().toPyDateTime()
+                order_kwargs['SchedTime'] = int(_sched_time.timestamp())
+                cond = f">={_sched_time}"
         except Exception as e:
             print(e)
             # raise e
         else:
-            add_order(**order_kwargs)
+            comfirm_order = ComfirmDialog(self, Cond=cond, **order_kwargs)
+            if self.checkBox_invalid.isChecked():
+                comfirm_order.label_subtitle.setText('新增无效指示')
+                comfirm_order.show()
+                comfirm_order.accepted.connect(lambda: add_inactive_order(**order_kwargs))
+            else:
+                comfirm_order.show()
+                comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
 
 class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
+    message_sig = pyqtSignal(str, str)
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_acc_info.__init__(self)
         self.setupUi(self)
         desktop = QDesktopWidget()
         self.move(desktop.width() - self.width(), (desktop.height() + self.height()) / 2)
+        self.Order = OrderDialog()
+        self.QuickOrder = QuickOrderWidget()
+        self.qprice = QPriceUpdate()
+        self.message = QMessageBox(self)
+        self.message.setModal(True)
+        self.init_signal()
+
+    def bind_account(self, account_id):
+        self.Order.comboBox_account.addItem(account_id)
+
+    def init_signal(self):
+        self.qprice.price_update_sig.connect(self.QuickOrder.price_table_update)
+        self.qprice.price_update_sig.connect(self.QuickOrder.price_info_update)
+        self.pushButton_Order.released.connect(self.Order.show)
+        self.pushButton_QuickOrder.released.connect(self.QuickOrder.show)
+        self.Order.lineEdit_ProdCode.textEdited.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))
+        self.QuickOrder.lineEdit_ProdCode.textEdited.connect(lambda text: self.Order.lineEdit_ProdCode.setText(text))
+        self.Order.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)
+        self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)
+        self.message_sig.connect(lambda title, text: self.message.warning(self, title, text))
+    #
+    # def create_cond_text(self, **kwargs):
+    #     _stoptype_text = {'L': '损>=' if kwargs['BuySell'] == 'B' else '损<=',
+    #                       'U': '升>=',
+    #                       'D': '跌<='}
+
+        # condtype = kwargs['CondType']
+        #
+        # if condtype == 0:
+        #     ...
+        # elif condtype==
+
+
 
     def closeEvent(self, a0: QtGui.QCloseEvent):
         reply = QtWidgets.QMessageBox.question(self, '退出', "是否要退出SP下单？",
@@ -254,9 +315,14 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
             order_kwargs['ValidType'] = self.comboBox_VaildType.currentIndex()
             order_kwargs['CondType'] = 0
             order_kwargs['Price'] = Price
+            cond = ''
         except Exception as e:
             raise e
-        print(order_kwargs)
+        else:
+            comfirm_order = ComfirmDialog(self, Cond=cond, **order_kwargs)
+            comfirm_order.show()
+            comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
+
         # add_order(**order_kwargs)
 
     def init_signal(self):
@@ -265,6 +331,7 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
         self.tableWidget_Price.itemDoubleClicked.connect(lambda i: self.doubleclick_order(i.row(), i.column()))
         self.pushButton_long.released.connect(lambda :self.addition_toler_order('B'))
         self.pushButton_short.released.connect(lambda: self.addition_toler_order('S'))
+        self.checkBox_Lock.toggled.connect(lambda b: [subscribe_price(self.lineEdit_ProdCode.text(), 1),time.sleep(0.5), self.adjust_ui(25)] if b else subscribe_price(self.lineEdit_ProdCode.text(), 0))
 
 
     def adjust_ui(self, n):
@@ -280,11 +347,13 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
             for i, p in enumerate(Price):
                 self.price_location[p] = i
                 self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 0, QIcon(os.path.join('ui', 'deleteorder.png')))
+                self.tableWidget_Price.set_item_sig.emit(i, 1, '')
                 self.tableWidget_Price.set_item_sig.emit(i, 2, '')
                 self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 3, QIcon(os.path.join('ui', 'addorder.png')))
                 self.tableWidget_Price.set_item_sig.emit(i, 4, str(p))
                 self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 5, QIcon(os.path.join('ui', 'addorder.png')))
                 self.tableWidget_Price.set_item_sig.emit(i, 6, '')
+                self.tableWidget_Price.set_item_sig.emit(i, 7, '')
                 self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 8, QIcon(os.path.join('ui', 'deleteorder.png')))
             self._price_active = True
             m = self.tableWidget_Price.verticalScrollBar().maximum() // 2
@@ -293,22 +362,23 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
             # self.tableWidget_Price.selectRow(self.tableWidget_Price.currentRow()-3)
             # self.tableWidget_Price.verticalScrollBar().
 
+
     def working_order_update(self):
         orders = get_orders_by_array()
         bid_qty_loc = []
         ask_qty_loc =[]
-        for order in orders:
+        for order in [o for o in orders if (o.ProdCode.decode('GBK') == self.lineEdit_ProdCode.text())&(o.Status in [1, 3, 8])]:
             price_loc = self.price_location.get(order.Price)
             print(price_loc)
             print(order.Qty)
-            if (order.BuySell.decode() == 'B')&price_loc:
+            if (order.BuySell.decode() == 'B')&(price_loc is not None):
                 origin_qty = self.tableWidget_Price.item(price_loc, 1).text()
                 if origin_qty:
                     self.tableWidget_Price.set_item_sig.emit(price_loc, 1, str(order.Qty + int(origin_qty)))
                 else:
                     self.tableWidget_Price.set_item_sig.emit(price_loc, 1, str(order.Qty))
                 bid_qty_loc.append(price_loc)
-            elif (order.BuySell.decode() == 'S')&price_loc:
+            elif (order.BuySell.decode() == 'S')&(price_loc is not None):
                 origin_qty = self.tableWidget_Price.item(price_loc, 7).text()
                 if origin_qty:
                     self.tableWidget_Price.set_item_sig.emit(price_loc, 7, str(order.Qty + int(origin_qty)))
@@ -387,13 +457,25 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
             self.order(buysell, limit_price)
 
 
+class ComfirmDialog(QtWidgets.QDialog, Ui_Dialog_order_comfirm):
+    def __init__(self, parent=None, **kwargs):
+        QtWidgets.QDialog.__init__(self, parent)
+        Ui_Dialog_order_comfirm.__init__(self)
+        self.setupUi(self)
+        self.update_comfirm_info(**kwargs)
 
+    def update_comfirm_info(self, **kwargs):
+        self.label_ProdCode.setText(kwargs.get('ProdCode', ''))
+        self.label_BuySell.setText({'B': '买入', 'S': '沽出'}.get(kwargs.get('BuySell'), ''))
+        self.label_Price.setText(str(kwargs.get('Price', '')))
+        self.label_Qty.setText(str(kwargs.get('Qty', '')))
+        self.label_Cond.setText(kwargs.get('Cond', ''))
+        if kwargs.get('ValidType') != 4:
+            validtime = ORDER_VALIDTYPE.get(kwargs['ValidType'])
+        else:
+            validtime = str(dt.datetime.fromtimestamp(kwargs.get('ValidTime')))
 
-
-
-
-
-
+        self.label_VaildTime.setText(validtime)
 
 
 if __name__ == '__main__':

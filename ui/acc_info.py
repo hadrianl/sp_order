@@ -292,7 +292,6 @@ class Ui_Form_acc_info(object):
         item = QtWidgets.QTableWidgetItem()
         self.tableWidget_ccy_rate.setHorizontalHeaderItem(0, item)
         self.tableWidget_ccy_rate.horizontalHeader().setStretchLastSection(False)
-        self.tableWidget_ccy_rate.verticalHeader().setVisible(False)
         self.tableWidget_ccy_rate.verticalHeader().setDefaultSectionSize(20)
         self.tableWidget_ccy_rate.verticalHeader().setMinimumSectionSize(15)
         self.tableWidget_ccy_rate.verticalHeader().setStretchLastSection(False)
