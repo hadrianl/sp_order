@@ -230,8 +230,8 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
     def init_signal(self):
         self.qprice.price_update_sig.connect(self.QuickOrder.price_table_update)
         self.qprice.price_update_sig.connect(self.QuickOrder.price_info_update)
-        self.pushButton_Order.released.connect(self.Order.show)
-        self.pushButton_QuickOrder.released.connect(self.QuickOrder.show)
+        self.pushButton_Order.toggled.connect(self.Order.setVisible)
+        self.pushButton_QuickOrder.toggled.connect(self.QuickOrder.setVisible)
         self.Order.lineEdit_ProdCode.textEdited.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))
         self.QuickOrder.lineEdit_ProdCode.textEdited.connect(lambda text: self.Order.lineEdit_ProdCode.setText(text))
         self.Order.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)
