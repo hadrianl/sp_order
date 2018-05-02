@@ -22,6 +22,8 @@ import pickle
 from ui.quick_order import Ui_Form_quick_order
 import datetime as dt
 import time
+from functools import reduce
+from operator import add
 # from sp_func.local import addOrder
 
 class OrderDialog(QDialog, Ui_Dialog):
@@ -230,6 +232,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
     def init_signal(self):
         self.qprice.price_update_sig.connect(self.QuickOrder.price_table_update)
         self.qprice.price_update_sig.connect(self.QuickOrder.price_info_update)
+        self.qprice.price_update_sig.connect(self.QuickOrder.holding_profit)
         self.pushButton_Order.toggled.connect(self.Order.setVisible)
         self.pushButton_QuickOrder.toggled.connect(self.QuickOrder.setVisible)
         self.Order.lineEdit_ProdCode.textEdited.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))
@@ -301,7 +304,9 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
         desktop = QDesktopWidget()
         self.move(desktop.width() - self.width(), 0)
         self.tableWidget_Price.setSelectionMode(QTableWidget.SingleSelection)
-
+        self.trade_long_queue = []
+        self.trade_short_queue = []
+        self.holding_pos = (0, 0)
         self.init_signal()
         self._price_active = False
 
@@ -432,6 +437,43 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
         toler = self.spinBox_toler.value()
         self.label_long_info.setText(f'@{bid}->{bid + toler}')
         self.label_short_info.setText(f'@{ask}->{ask - toler}')
+
+    def position_takeprofit_info_update(self):
+        trades = get_all_trades_by_array()
+        current_trades = [trade for trade in trades if trade.ProdCode.decode('GBK') == self.lineEdit_ProdCode.text()].sort(lambda x:x.IntOrderNo)
+        self.trade_long_queue.clear()
+        self.trade_short_queue.clear()
+        for t in current_trades:
+            trade_dict = {}
+            for name, c_type in t._fields_:
+                trade_dict[name] = getattr(t, name)
+
+            current_trade = [trade_dict['AvgPrice']] * trade_dict['Qty']
+            if trade_dict['BuySell'].decode('GBK') == 'B':
+                self.trade_long_queue.extend(current_trade)
+            else:
+                self.trade_short_queue.extend(current_trade)
+
+        close_pos_takeprofit = reduce(add, [s-l for l, s in zip(self.trade_long_queue, self.trade_short_queue)])
+        long_pos_num = len(self.trade_long_queue)
+        short_pos_num = len(self.trade_short_queue)
+        holding_pos_num = long_pos_num - short_pos_num
+
+        if  long_pos_num == short_pos_num:
+            self.holding_pos = (0, 0)
+        elif long_pos_num > short_pos_num:
+            self.holding_pos = (holding_pos_num, sum(self.trade_long_queue[-1:-(abs(long_pos_num-short_pos_num)+1):-1]) / holding_pos_num)
+        else:
+            self.holding_pos = (holding_pos_num, sum(self.trade_short_queue[-1:-(abs(long_pos_num-short_pos_num)+1):-1]) / holding_pos_num)
+
+        self.label_closed_profit.setText(f'{close_pos_takeprofit:,.2f}')
+
+        self.label_pos.setText(f'{self.holding_pos[0]}@{self.holding_pos[1]:,.2f}')
+
+    def holding_profit(self, price_dict):
+        profit = (price_dict['Last'][0] - self.holding_pos[1]) * self.holding_pos[0]
+        self.label_holding_porfit.setText(f'{profit:,.2f}')
+
 
     def doubleclick_order(self, row, column):
         price = float(self.tableWidget_Price.item(row, 4).text())

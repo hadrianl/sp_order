@@ -11,12 +11,14 @@ from spapi.spAPI import *
 import datetime as dt
 from spapi.conf.util import ORDER_STATUS
 import pickle
-from threading import Lock
+from threading import Thread
+from queue import Queue
 
 
 
 local_login = False
-lock = Lock()
+
+handle_queue = Queue()
 def addOrder(**kwargs):
     if local_login:
         add_order(**kwargs)
@@ -26,6 +28,24 @@ def addOrder(**kwargs):
 def info_handle(type, info, info_struct=None, handle_type=0):
     if handle_type == 0:
         print('*LOCAL*' + type + info)
+        if info_struct is not None:
+            handle_queue.put(info_struct)
+        # try:
+        #         #     is_struct = map(lambda x: isinstance(info_struct, x),
+        #         #                     [SPApiOrder, SPApiPos, SPApiTrade, SPApiAccBal, SPApiAccInfo])
+        #         #     update_func = [_update_order, _update_postion, _update_trade, _update_accbals, _update_acc_info]
+        #         #     for b, f in zip(is_struct, update_func):
+        #         #         if b:
+        #         #             f(info_struct)
+        #         # except Exception as e:
+        #         #     print(e)
+    elif handle_type == 1:
+        print('*LOCAL*' + type + info)
+        AccInfo.message_sig.emit('WARNING', info_struct.decode('GBK'))
+
+def info_handler():
+    while True:
+        info_struct = handle_queue.get()
         try:
             is_struct = map(lambda x: isinstance(info_struct, x),
                             [SPApiOrder, SPApiPos, SPApiTrade, SPApiAccBal, SPApiAccInfo])
@@ -36,9 +56,6 @@ def info_handle(type, info, info_struct=None, handle_type=0):
         except Exception as e:
             print(e)
 
-    elif handle_type == 1:
-        print('*LOCAL*' + type + info)
-        AccInfo.message_sig.emit('WARNING', info_struct.decode('GBK'))
 
 def update_acc_info():
     try:
@@ -198,6 +215,8 @@ def _update_trade(t):
     for name, c_type in t._fields_:
         trade_dict[name] = getattr(t, name)
 
+    if AccInfo.QuickOrder.checkBox_Lock.isChecked():
+        AccInfo.QuickOrder.position_takeprofit_info_update()
     r = 0
     for i in range(AccInfo.tableWidget_trades.rowCount()):
         if trade_dict['IntOrderNo'] == int(AccInfo.tableWidget_trades.item(i, 11).text()):
@@ -222,7 +241,8 @@ def _update_trade(t):
                   trade_dict['RecNO']]
 
     for i, s in zip(range(14), map(str, trade_info)):
-        AccInfo.tableWidget_trades.set_item_sig.emit(r, i, s)
+        # AccInfo.tableWidget_trades.set_item_sig.emit(r, i, s)
+        AccInfo.tableWidget_trades.setItem(r, i, QTableWidgetItem(s))
 
     print('trade:', trade_dict)
     return trade_dict
@@ -362,7 +382,7 @@ def order_report(rec_no, order):
 
 @on_trade_report  # 成交记录更新后回调出推送新的成交记录
 def trade_report(rec_no, trade):
-    info_handle('<成交>', f'{rec_no}新成交{trade.OpenClose.decode()}--@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}', trade)
+    info_handle('<成交>', f'{rec_no}新成交{trade.OpenClose.decode()}--@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}')
 
 @on_updated_account_position_push  # 新持仓信息
 def updated_account_position_push(pos):
@@ -413,15 +433,18 @@ def init_spapi():
         pickle.dump(info, f)
     # info.update(user_id=user_id, password=password)
     if initialize() == 0:
+        global update_thread
         info_handle('<API>','初始化成功')
         set_login_info(**info, password=password)
+        update_thread = Thread(target=info_handler)
+        update_thread.start()
         info_handle('<连接>', f"设置登录信息-host:{info['host']} port:{info['port']} license:{info['License']} app_id:{info['app_id']} user_id:{info['user_id']}")
         login()
         # win.show()
         AccInfo.bind_account(info['user_id'])
         import time
         time.sleep(1.5)
-        AccInfo.toolButton_update_info.released.emit()
+        # AccInfo.toolButton_update_info.released.emit()
         AccInfo.show()
         # get_instrument_by_code('HSI')
         # print(get_product_by_array())

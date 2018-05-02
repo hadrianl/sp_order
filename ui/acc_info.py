@@ -23,6 +23,7 @@ class Ui_Form_acc_info(object):
         sizePolicy.setHeightForWidth(self.tableWidget_acc_info.sizePolicy().hasHeightForWidth())
         self.tableWidget_acc_info.setSizePolicy(sizePolicy)
         self.tableWidget_acc_info.setMaximumSize(QtCore.QSize(250, 16777215))
+        self.tableWidget_acc_info.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.tableWidget_acc_info.setColumnCount(1)
         self.tableWidget_acc_info.setObjectName("tableWidget_acc_info")
         self.tableWidget_acc_info.setRowCount(14)
