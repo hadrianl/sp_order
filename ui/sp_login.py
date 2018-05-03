@@ -94,6 +94,11 @@ class Ui_Dialog_sp_login(object):
         self.buttonBox.accepted.connect(Dialog_sp_login.accept)
         self.buttonBox.rejected.connect(Dialog_sp_login.reject)
         QtCore.QMetaObject.connectSlotsByName(Dialog_sp_login)
+        Dialog_sp_login.setTabOrder(self.lineEdit_password, self.lineEdit_host)
+        Dialog_sp_login.setTabOrder(self.lineEdit_host, self.lineEdit_license)
+        Dialog_sp_login.setTabOrder(self.lineEdit_license, self.lineEdit_app_id)
+        Dialog_sp_login.setTabOrder(self.lineEdit_app_id, self.lineEdit_user_id)
+        Dialog_sp_login.setTabOrder(self.lineEdit_user_id, self.lineEdit_port)
 
     def retranslateUi(self, Dialog_sp_login):
         _translate = QtCore.QCoreApplication.translate

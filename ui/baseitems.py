@@ -8,7 +8,8 @@
 
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem
 from PyQt5.Qt import QObject, QIcon
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, QThread
+from queue import Queue
 
 class QInfoWidget(QTableWidget):
     set_item_sig = pyqtSignal([int, int, str], [int, int, QIcon])
@@ -23,3 +24,17 @@ class QPriceUpdate(QObject):
     price_update_sig = pyqtSignal(dict)
     def __init__(self, parent=None):
         QObject.__init__(self, parent)
+
+# class QHandler(QThread):
+#     def __init__(self, parent=None, queue=None):
+#         QThread.__init__(self, parent)
+#         self.handle_queue = queue
+#
+#
+#     def run(self):
+#         while True:
+#             handler, arg, kwargs = self.handle_queue.get()
+#             try:
+#                 handler(*arg, **kwargs)
+#             except Exception as e:
+#                 print(e)

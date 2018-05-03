@@ -5,13 +5,14 @@
 # @File    : Spfunc.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 
-from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QSize, QColor, QFont, QRect, QMessageBox,pyqtSignal
+from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QSize, QColor, QFont, QRect, QMessageBox,pyqtSignal, QTableWidgetItem
 from PyQt5 import QtWidgets, QtCore
-from PyQt5 import QtGui
+from PyQt5 import QtGui, Qt
 import sys
-from ui.order_dialog import Ui_Dialog
+from ui.order_dialog import Ui_Dialog_order
 from ui.acc_info import Ui_Form_acc_info
 from ui.sp_login import Ui_Dialog_sp_login
+from ui.quick_order_dialog import Ui_Dialog_quick_order
 from ui.order_comfirm_dialog import Ui_Dialog_order_comfirm
 from ui.baseitems import QPriceUpdate
 import datetime as dt
@@ -19,17 +20,16 @@ from spapi.spAPI import *
 from spapi.conf.util import ORDER_VALIDTYPE
 import os
 import pickle
-from ui.quick_order import Ui_Form_quick_order
 import datetime as dt
 import time
 from functools import reduce
 from operator import add
 # from sp_func.local import addOrder
 
-class OrderDialog(QDialog, Ui_Dialog):
+class OrderDialog(QDialog, Ui_Dialog_order):
     def __init__(self, parent=None):
         QDialog.__init__(self, parent)
-        Ui_Dialog.__init__(self)
+        Ui_Dialog_order.__init__(self)
         self.setupUi(self)
         self.init_state()
         self.init_signal()
@@ -212,15 +212,18 @@ class OrderDialog(QDialog, Ui_Dialog):
                 comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
 
 class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
-    message_sig = pyqtSignal(str, str)
+    warning_sig = pyqtSignal(str, str)
+    info_sig = pyqtSignal(str, str)
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_acc_info.__init__(self)
         self.setupUi(self)
         desktop = QDesktopWidget()
         self.move(desktop.width() - self.width(), (desktop.height() + self.height()) / 2)
-        self.Order = OrderDialog()
-        self.QuickOrder = QuickOrderWidget()
+        # self.move(self.parent().width() - self.width(), (self.parent().height() + self.height()) / 2)
+        self.setWindowFlags(Qt.Qt.Window)
+        self.Order = OrderDialog(self.parent())
+        self.QuickOrder = QuickOrderDialog(self.parent())
         self.qprice = QPriceUpdate()
         self.message = QMessageBox(self)
         self.message.setModal(True)
@@ -239,7 +242,8 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.QuickOrder.lineEdit_ProdCode.textEdited.connect(lambda text: self.Order.lineEdit_ProdCode.setText(text))
         self.Order.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)
         self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)
-        self.message_sig.connect(lambda title, text: self.message.warning(self, title, text))
+        self.warning_sig.connect(lambda title, text: self.message.warning(self.parent(), title, text))
+        self.info_sig.connect(lambda title, text: self.message.information(self.parent(), title, text))
     #
     # def create_cond_text(self, **kwargs):
     #     _stoptype_text = {'L': '损>=' if kwargs['BuySell'] == 'B' else '损<=',
@@ -253,27 +257,13 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         # elif condtype==
 
 
-
-    def closeEvent(self, a0: QtGui.QCloseEvent):
-        reply = QtWidgets.QMessageBox.question(self, '退出', "是否要退出SP下单？",
-                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                                               QtWidgets.QMessageBox.No)
-        if reply == QtWidgets.QMessageBox.Yes:
-            a0.accept()
-            pid = os.getpid()
-            os.system(f'taskkill /F /PID {pid}')
-        else:
-            a0.ignore()
-
-
-
 class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
+    login_comfirm_sig = pyqtSignal()
     def __init__(self, parent=None):
         QDialog.__init__(self, parent)
         Ui_Dialog_sp_login.__init__(self)
         self.setupUi(self)
         self.init_info()
-        # self.accepted.connect(lambda :AccInfoWidget())
 
     def login_waring(self, text):
         QtWidgets.QMessageBox.warning(self,'登录错误',text)
@@ -291,10 +281,10 @@ class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
             except Exception as e:
                 print(e)
 
-class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
+class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
-        Ui_Form_quick_order.__init__(self)
+        Ui_Dialog_quick_order.__init__(self)
         self.setupUi(self)
         self.tableWidget_Price.setColumnWidth(0, 30)
         self.tableWidget_Price.setColumnWidth(3, 30)
@@ -303,6 +293,7 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
         self.tableWidget_Price.setColumnWidth(8, 30)
         desktop = QDesktopWidget()
         self.move(desktop.width() - self.width(), 0)
+        # self.move(self.parent().width() - self.width(), 0)
         self.tableWidget_Price.setSelectionMode(QTableWidget.SingleSelection)
         self.trade_long_queue = []
         self.trade_short_queue = []
@@ -351,19 +342,29 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
             self.price_location = {}
             for i, p in enumerate(Price):
                 self.price_location[p] = i
-                self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 0, QIcon(os.path.join('ui', 'deleteorder.png')))
-                self.tableWidget_Price.set_item_sig.emit(i, 1, '')
-                self.tableWidget_Price.set_item_sig.emit(i, 2, '')
-                self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 3, QIcon(os.path.join('ui', 'addorder.png')))
-                self.tableWidget_Price.set_item_sig.emit(i, 4, str(p))
-                self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 5, QIcon(os.path.join('ui', 'addorder.png')))
-                self.tableWidget_Price.set_item_sig.emit(i, 6, '')
-                self.tableWidget_Price.set_item_sig.emit(i, 7, '')
-                self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 8, QIcon(os.path.join('ui', 'deleteorder.png')))
+                # self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 0, QIcon(os.path.join('ui', 'deleteorder.png')))
+                # self.tableWidget_Price.set_item_sig.emit(i, 1, '')
+                # self.tableWidget_Price.set_item_sig.emit(i, 2, '')
+                # self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 3, QIcon(os.path.join('ui', 'addorder.png')))
+                # self.tableWidget_Price.set_item_sig.emit(i, 4, str(p))
+                # self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 5, QIcon(os.path.join('ui', 'addorder.png')))
+                # self.tableWidget_Price.set_item_sig.emit(i, 6, '')
+                # self.tableWidget_Price.set_item_sig.emit(i, 7, '')
+                # self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 8, QIcon(os.path.join('ui', 'deleteorder.png')))
+                self.tableWidget_Price.setItem(i, 0, QTableWidgetItem(QIcon(os.path.join('ui', 'deleteorder.png')), ''))
+                self.tableWidget_Price.setItem(i, 1, QTableWidgetItem(''))
+                self.tableWidget_Price.setItem(i, 2, QTableWidgetItem(''))
+                self.tableWidget_Price.setItem(i, 3, QTableWidgetItem(QIcon(os.path.join('ui', 'addorder.png')), ''))
+                self.tableWidget_Price.setItem(i, 4, QTableWidgetItem(str(p)))
+                self.tableWidget_Price.setItem(i, 5, QTableWidgetItem(QIcon(os.path.join('ui', 'addorder.png')), ''))
+                self.tableWidget_Price.setItem(i, 6, QTableWidgetItem(''))
+                self.tableWidget_Price.setItem(i, 7, QTableWidgetItem(''))
+                self.tableWidget_Price.setItem(i, 8, QTableWidgetItem(QIcon(os.path.join('ui', 'deleteorder.png')), ''))
             self._price_active = True
             m = self.tableWidget_Price.verticalScrollBar().maximum() // 2
             self.tableWidget_Price.verticalScrollBar().setValue(m)
             self.working_order_update()
+            self.tableWidget_Price.viewport().update()
             # self.tableWidget_Price.selectRow(self.tableWidget_Price.currentRow()-3)
             # self.tableWidget_Price.verticalScrollBar().
 
@@ -379,22 +380,22 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
             if (order.BuySell.decode() == 'B')&(price_loc is not None):
                 origin_qty = self.tableWidget_Price.item(price_loc, 1).text()
                 if origin_qty:
-                    self.tableWidget_Price.set_item_sig.emit(price_loc, 1, str(order.Qty + int(origin_qty)))
+                    self.tableWidget_Price.setItem(price_loc, 1, QTableWidgetItem(str(order.Qty + int(origin_qty))))
                 else:
-                    self.tableWidget_Price.set_item_sig.emit(price_loc, 1, str(order.Qty))
+                    self.tableWidget_Price.setItem(price_loc, 1, QTableWidgetItem(str(order.Qty)))
                 bid_qty_loc.append(price_loc)
-            elif (order.BuySell.decode() == 'S')&(price_loc is not None):
+            elif (order.BuySell.decode() == 'S') & (price_loc is not None):
                 origin_qty = self.tableWidget_Price.item(price_loc, 7).text()
                 if origin_qty:
-                    self.tableWidget_Price.set_item_sig.emit(price_loc, 7, str(order.Qty + int(origin_qty)))
+                    self.tableWidget_Price.setItem(price_loc, 7, QTableWidgetItem(str(order.Qty + int(origin_qty))))
                 else:
-                    self.tableWidget_Price.set_item_sig.emit(price_loc, 7, str(order.Qty))
+                    self.tableWidget_Price.setItem(price_loc, 7, QTableWidgetItem(str(order.Qty)))
                 ask_qty_loc.append(price_loc)
 
         for i in set(self.price_location.values()) - set(bid_qty_loc):
-            self.tableWidget_Price.set_item_sig.emit(i, 1, '')
+            self.tableWidget_Price.setItem(i, 1, QTableWidgetItem(''))
         for i in set(self.price_location.values()) - set(ask_qty_loc):
-            self.tableWidget_Price.set_item_sig.emit(i, 7, '')
+            self.tableWidget_Price.setItem(i, 7, QTableWidgetItem(''))
 
     def price_table_update(self, price_dict):
         bids_loc = []
@@ -407,17 +408,17 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
                 bid_loc = self.price_location.get(price_dict['Bid'][i])
                 ask_loc = self.price_location.get(price_dict['Ask'][i])
                 if bid_loc:
-                    self.tableWidget_Price.update_item_sig.emit(bid_loc, 2, str(price_dict['BidQty'][i]))
+                    self.tableWidget_Price.item(bid_loc, 2).setText(str(price_dict['BidQty'][i]))
                     bids_loc.append(bid_loc)
                 if ask_loc:
-                    self.tableWidget_Price.update_item_sig.emit(ask_loc, 6, str(price_dict['AskQty'][i]))
+                    self.tableWidget_Price.item(ask_loc, 6).setText(str(price_dict['AskQty'][i]))
                     asks_loc.append(ask_loc)
 
             bid_empty_loc = set(self.price_location.values()) - set(bids_loc)
             ask_empty_loc = set(self.price_location.values()) - set(asks_loc)
             for n, m in zip(bid_empty_loc, ask_empty_loc):
-                self.tableWidget_Price.update_item_sig.emit(n, 2, '')
-                self.tableWidget_Price.update_item_sig.emit(m, 6, '')
+                self.tableWidget_Price.item(n, 2).setText('')
+                self.tableWidget_Price.item(m, 6).setText('')
 
             last1_loc = self.price_location.get(price_dict['Last'][0])
             bid1_loc = self.price_location.get(price_dict['Bid'][0])
@@ -430,6 +431,7 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
                     self.tableWidget_Price.item(i, 4).setFont(QFont('Microsoft YaHei', 9, QFont.Bold))
                 else:
                     self.tableWidget_Price.item(i, 4).setFont(QFont('Microsoft YaHei', 9, QFont.Normal))
+            self.tableWidget_Price.viewport().update()
 
     def price_info_update(self, price_dict):
         bid = price_dict['Bid'][0]
@@ -440,7 +442,7 @@ class QuickOrderWidget(QtWidgets.QWidget, Ui_Form_quick_order):
 
     def position_takeprofit_info_update(self):
         trades = get_all_trades_by_array()
-        current_trades = [trade for trade in trades if trade.ProdCode.decode('GBK') == self.lineEdit_ProdCode.text()].sort(lambda x:x.IntOrderNo)
+        current_trades = [trade for trade in trades if trade.ProdCode.decode('GBK') == self.lineEdit_ProdCode.text()].sort(key=lambda x:x.IntOrderNo)
         self.trade_long_queue.clear()
         self.trade_short_queue.clear()
         for t in current_trades:
@@ -518,6 +520,22 @@ class ComfirmDialog(QtWidgets.QDialog, Ui_Dialog_order_comfirm):
             validtime = str(dt.datetime.fromtimestamp(kwargs.get('ValidTime')))
 
         self.label_VaildTime.setText(validtime)
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __int__(self, parent=None, *args, **kwargs):
+        QtWidgets.QMainWindow.__init__(self, parent, *args, **kwargs)
+        # self.setWindowTitle('Sharp Point Order System --- Carry Investment')
+
+    def closeEvent(self, a0: QtGui.QCloseEvent):
+        reply = QtWidgets.QMessageBox.question(self, '退出', "是否要退出SP下单？",
+                                               QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                                               QtWidgets.QMessageBox.No)
+        if reply == QtWidgets.QMessageBox.Yes:
+            a0.accept()
+            pid = os.getpid()
+            os.system(f'taskkill /F /PID {pid}')
+        else:
+            a0.ignore()
 
 
 if __name__ == '__main__':
