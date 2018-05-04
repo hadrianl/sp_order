@@ -11,7 +11,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_Dialog_quick_order(object):
     def setupUi(self, Dialog_quick_order):
         Dialog_quick_order.setObjectName("Dialog_quick_order")
-        Dialog_quick_order.resize(430, 620)
+        Dialog_quick_order.resize(430, 842)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)

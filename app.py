@@ -453,13 +453,9 @@ def init_spapi():
         # win.show()
         # win.showMaximized()
         # AccInfo.show()
+        load_instrument_list()
         # get_instrument_by_code('HSI')
-        # print(get_product_by_array())
-        # get_product_info('HSIJ8')
-        # subscribe_price('HSIJ8', 1)
-        # import time
-        # time.sleep(2)
-        # del time
+        # print(get_instrument_count())
 
 def deinit_spapi():
     if logout() == 0:

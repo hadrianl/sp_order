@@ -244,6 +244,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)
         self.warning_sig.connect(lambda title, text: self.message.warning(self.parent(), title, text))
         self.info_sig.connect(lambda title, text: self.message.information(self.parent(), title, text))
+        self.pushButton_test.released.connect(lambda :print(get_instrument_count()))
     #
     # def create_cond_text(self, **kwargs):
     #     _stoptype_text = {'L': '损>=' if kwargs['BuySell'] == 'B' else '损<=',
@@ -291,8 +292,8 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         self.tableWidget_Price.setColumnWidth(4, 70)
         self.tableWidget_Price.setColumnWidth(5, 30)
         self.tableWidget_Price.setColumnWidth(8, 30)
-        desktop = QDesktopWidget()
-        self.move(desktop.width() - self.width(), 0)
+        # desktop = QDesktopWidget()
+        self.move(0, 20)
         # self.move(self.parent().width() - self.width(), 0)
         self.tableWidget_Price.setSelectionMode(QTableWidget.SingleSelection)
         self.trade_long_queue = []
