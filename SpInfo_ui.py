@@ -14,7 +14,9 @@ from ui.acc_info import Ui_Form_acc_info
 from ui.sp_login import Ui_Dialog_sp_login
 from ui.quick_order_dialog import Ui_Dialog_quick_order
 from ui.order_comfirm_dialog import Ui_Dialog_order_comfirm
+from ui.close_position_dialog import Ui_Dialog_close_position
 from ui.baseitems import QPriceUpdate
+
 import datetime as dt
 from spapi.spAPI import *
 from spapi.conf.util import ORDER_VALIDTYPE
@@ -214,6 +216,7 @@ class OrderDialog(QDialog, Ui_Dialog_order):
 class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
     warning_sig = pyqtSignal(str, str)
     info_sig = pyqtSignal(str, str)
+    acc_info_sig = pyqtSignal(float)
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_acc_info.__init__(self)
@@ -227,6 +230,10 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.qprice = QPriceUpdate()
         self.message = QMessageBox(self)
         self.message.setModal(True)
+        self.acc_info = {}
+        self.trades_info = []
+        self.pos_info = {}
+        self.PL = {}
         self.init_signal()
 
     def bind_account(self, account_id):
@@ -236,6 +243,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.qprice.price_update_sig.connect(self.QuickOrder.price_table_update)
         self.qprice.price_update_sig.connect(self.QuickOrder.price_info_update)
         self.qprice.price_update_sig.connect(self.QuickOrder.holding_profit)
+        self.qprice.price_update_sig.connect(self.update_pos_info)
         self.pushButton_Order.toggled.connect(self.Order.setVisible)
         self.pushButton_QuickOrder.toggled.connect(self.QuickOrder.setVisible)
         self.Order.lineEdit_ProdCode.textEdited.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))
@@ -244,7 +252,48 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)
         self.warning_sig.connect(lambda title, text: self.message.warning(self.parent(), title, text))
         self.info_sig.connect(lambda title, text: self.message.information(self.parent(), title, text))
-        self.pushButton_test.released.connect(lambda :print(get_instrument_count()))
+        self.pushButton_test.released.connect(lambda :print(load_productinfolist_by_code('HSI')))
+        self.acc_info_sig.connect(self.update_acc_info)
+
+    def update_pos_info(self, price_dict):
+        for t in range(self.tableWidget_pos.rowCount()):
+            prodcode = price_dict['ProdCode'].decode()
+            if  prodcode == self.tableWidget_pos.item(t, 0).text():
+                # AccInfo.tableWidget_pos.update_item_sig.emit(t, 8, str(price_dict['Last'][0]))
+                pos = self.pos_info[price_dict['ProdCode'].decode()]
+                net_pos = pos['Qty'] + pos['LongQty'] - pos['ShortQty']
+                amt = (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt']) / abs(net_pos) if net_pos != 0 else 0
+                self.tableWidget_pos.item(t, 8).setText(str(price_dict['Last'][0]))
+                leverage = int(self.tableWidget_pos.item(t, 13).text())
+                PL = (net_pos * (price_dict['Last'][0] - amt)) * leverage
+                self.tableWidget_pos.item(t, 9).setText(f"{PL:.2f}HKD")
+        self.tableWidget_pos.viewport().update()
+        self.PL[prodcode] = PL
+        self.acc_info_sig.emit(sum(self.PL.values()))
+
+    def update_trade_info(self, trade_dict):
+        self.trades_info.append(trade_dict)
+
+    def update_acc_info(self, PL):
+        ccy = self.acc_info['BaseCcy'].decode()
+        BuyingPower = self.acc_info['CashBal'] + self.acc_info['CreditLimit'] + PL - self.acc_info['IMargin']
+        NAV = self.acc_info['CashBal'] + PL
+        MarginCall = self.acc_info['IMargin'] - (self.acc_info['CashBal'] + self.acc_info['CreditLimit'] + PL) if (self.acc_info['CashBal'] + self.acc_info['CreditLimit'] + PL) < self.acc_info['IMargin'] else 0
+        CommodityPL = PL
+        try:
+            MarginLevel = (self.acc_info['CashBal'] + self.acc_info['CreditLimit'] + PL) / \
+                          self.acc_info['IMargin']
+            ML = f'{MarginLevel:.2%}'
+        except ZeroDivisionError:
+            ML = '-'
+
+        self.tableWidget_acc_info.setItem(0, 0, QTableWidgetItem(f"{BuyingPower:,} {ccy}"))
+        self.tableWidget_acc_info.setItem(1, 0, QTableWidgetItem(f"{NAV:,} {ccy}"))
+        self.tableWidget_acc_info.setItem(2, 0, QTableWidgetItem(f"{MarginCall:,} {ccy}"))
+        self.tableWidget_acc_info.setItem(3, 0, QTableWidgetItem(f"{CommodityPL:,.2f} {ccy}"))
+        self.tableWidget_acc_info.setItem(6, 0, QTableWidgetItem(ML))
+        # self.tableWidget_acc_info.setItem(0, 0, f"{BuyingPower:,} {ccy}")
+
     #
     # def create_cond_text(self, **kwargs):
     #     _stoptype_text = {'L': '损>=' if kwargs['BuySell'] == 'B' else '损<=',
@@ -264,23 +313,102 @@ class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
         QDialog.__init__(self, parent)
         Ui_Dialog_sp_login.__init__(self)
         self.setupUi(self)
+        self.login_info = []
         self.init_info()
 
     def login_waring(self, text):
         QtWidgets.QMessageBox.warning(self,'登录错误',text)
 
+    def set_info(self, info):
+        self.lineEdit_host.setText(info['host'])
+        self.lineEdit_port.setText(str(info['port']))
+        self.lineEdit_license.setText(info['License'])
+        self.lineEdit_app_id.setText(info['app_id'])
+        self.lineEdit_user_id.setText(info['user_id'])
+
     def init_info(self):
         if os.path.exists('info.plk'):
             try:
                 with open('info.plk', 'rb') as f:
-                    info = pickle.load(f)
-                    self.lineEdit_host.setText(info['host'])
-                    self.lineEdit_port.setText(str(info['port']))
-                    self.lineEdit_license.setText(info['License'])
-                    self.lineEdit_app_id.setText(info['app_id'])
-                    self.lineEdit_user_id.setText(info['user_id'])
+                    self.login_info = pickle.load(f)
+                    info = self.login_info[0]
+                    self.set_info(info)
+                    self.comboBox_account.addItems([i['user_id'] for i in self.login_info])
+                    self.comboBox_account.currentIndexChanged.connect(lambda n:self.set_info(self.login_info[n]))
             except Exception as e:
                 print(e)
+
+    def pickle_info(self):
+        host = self.lineEdit_host.text()
+        port = self.lineEdit_port.text()
+        License = self.lineEdit_license.text()
+        app_id = self.lineEdit_app_id.text()
+        user_id = self.lineEdit_user_id.text()
+        info = {'host': host, 'port': int(port), 'License': License, 'app_id': app_id, 'user_id': user_id}
+
+        for i, l in enumerate(self.login_info):
+            if info['user_id'] == l['user_id']:
+                self.login_info.insert(0, self.login_info.pop(i))
+                break
+        else:
+            self.login_info.insert(0, info)
+
+        with open('info.plk', 'wb') as f:
+            pickle.dump(self.login_info, f)
+
+class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):
+    def __init__(self, BuySell, ProdCode, Qty, parent=None):
+        QtWidgets.QDialog.__init__(self, parent)
+        Ui_Dialog_close_position.__init__(self)
+        self.setupUi(self)
+        self.pushButton_Long.setVisible(BuySell == 'B')
+        self.pushButton_Short.setVisible(BuySell == 'S')
+        self.lineEdit_ProdCode.setText(ProdCode)
+        self.spinBox_Qty.setValue(Qty)
+        self.init_signal()
+        self.show()
+        self.sub_prodcode(ProdCode)
+
+    def init_signal(self):
+        self.pushButton_Long.released.connect(lambda :self.close_position('B'))
+        self.pushButton_Short.released.connect(lambda :self.close_position('S'))
+
+
+    def sub_prodcode(self, prodcode):
+        if subscribe_price(prodcode, 1) != 0:
+            mb = QMessageBox()
+            mb.warning(self, f'WARING-订阅', f'订阅{prodcode}数据失败')
+            mb.accepted.connect(self.close)
+        else:
+            QMessageBox.information(self, f'INFO-订阅成功', f'订阅{prodcode}数据成功')
+
+
+    def close_position(self, BuySell):
+        try:
+            order_kwargs = {}
+            order_kwargs['ProdCode'] = self.lineEdit_ProdCode.text()
+            order_kwargs['Qty'] = self.spinBox_Qty.value()
+            order_kwargs['BuySell'] = BuySell
+            order_kwargs['OrderOptions'] = 1 if self.checkBox_OrderOptions.checkState() else 0
+            order_kwargs['Ref'] = '一键平仓'
+            order_kwargs['CondType'] = 0
+            order_kwargs['ValidType'] = self.comboBox_ValidType.currentIndex()
+            order_kwargs['OrderType'] = 0
+            if self.checkBox_MarketOrder.isChecked():
+                price = get_price_by_code(self.lineEdit_ProdCode.text())
+                order_kwargs['Price'] = price.Bid[0] + self.spinBox_toler.value() if BuySell == 'B' else price.Ask[0] - self.spinBox_toler.value()
+            else:
+                order_kwargs['Price'] = self.spinBox_Price.value()
+        except Exception as e:
+            QMessageBox.warning(self, 'ERROR-平仓', str(e))
+        else:
+            comfirm_order = ComfirmDialog(self, **order_kwargs)
+            comfirm_order.show()
+            comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
+            comfirm_order.accepted.connect(lambda :self.accept())
+
+
+
 
 class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
     def __init__(self, parent=None):
@@ -320,7 +448,20 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             comfirm_order.show()
             comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
 
-        # add_order(**order_kwargs)
+    def close_all_position(self):
+        try:
+            prodcode = self.lineEdit_ProdCode.text()
+            pos = get_pos_by_product(prodcode)
+            net_pos = pos.DepQty + pos.LongQty - pos.ShortQty
+            if net_pos > 0:
+                ClosePositionDialog('S', prodcode, net_pos)
+            elif net_pos < 0:
+                ClosePositionDialog('B', prodcode, -net_pos)
+            else:
+                QMessageBox.warning(self, 'WARNING-平仓', f'{prodcode}没有仓位')
+        except Exception as e:
+            QMessageBox.warning(self, 'ERROR-平仓', f'{e}或{prodcode}没有仓位')
+
 
     def init_signal(self):
         # self.checkBox_Lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
@@ -328,7 +469,9 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         self.tableWidget_Price.itemDoubleClicked.connect(lambda i: self.doubleclick_order(i.row(), i.column()))
         self.pushButton_long.released.connect(lambda :self.addition_toler_order('B'))
         self.pushButton_short.released.connect(lambda: self.addition_toler_order('S'))
-        self.checkBox_Lock.toggled.connect(lambda b: [subscribe_price(self.lineEdit_ProdCode.text(), 1),time.sleep(0.5), self.adjust_ui(25)] if b else subscribe_price(self.lineEdit_ProdCode.text(), 0))
+        self.checkBox_Lock.toggled.connect(lambda b: [subscribe_price(self.lineEdit_ProdCode.text(), 1),time.sleep(0.5), self.adjust_ui(25)] if b else ...)
+        self.pushButton_close_position.released.connect(self.close_all_position)
+
 
 
     def adjust_ui(self, n):
@@ -343,15 +486,6 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             self.price_location = {}
             for i, p in enumerate(Price):
                 self.price_location[p] = i
-                # self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 0, QIcon(os.path.join('ui', 'deleteorder.png')))
-                # self.tableWidget_Price.set_item_sig.emit(i, 1, '')
-                # self.tableWidget_Price.set_item_sig.emit(i, 2, '')
-                # self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 3, QIcon(os.path.join('ui', 'addorder.png')))
-                # self.tableWidget_Price.set_item_sig.emit(i, 4, str(p))
-                # self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 5, QIcon(os.path.join('ui', 'addorder.png')))
-                # self.tableWidget_Price.set_item_sig.emit(i, 6, '')
-                # self.tableWidget_Price.set_item_sig.emit(i, 7, '')
-                # self.tableWidget_Price.set_item_sig[int, int, QIcon].emit(i, 8, QIcon(os.path.join('ui', 'deleteorder.png')))
                 self.tableWidget_Price.setItem(i, 0, QTableWidgetItem(QIcon(os.path.join('ui', 'deleteorder.png')), ''))
                 self.tableWidget_Price.setItem(i, 1, QTableWidgetItem(''))
                 self.tableWidget_Price.setItem(i, 2, QTableWidgetItem(''))
@@ -362,10 +496,11 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
                 self.tableWidget_Price.setItem(i, 7, QTableWidgetItem(''))
                 self.tableWidget_Price.setItem(i, 8, QTableWidgetItem(QIcon(os.path.join('ui', 'deleteorder.png')), ''))
             self._price_active = True
-            m = self.tableWidget_Price.verticalScrollBar().maximum() // 2
-            self.tableWidget_Price.verticalScrollBar().setValue(m)
             self.working_order_update()
             self.tableWidget_Price.viewport().update()
+            m = self.tableWidget_Price.verticalScrollBar().maximum() // 2
+            # print(m)
+            self.tableWidget_Price.verticalScrollBar().setValue(m)
             # self.tableWidget_Price.selectRow(self.tableWidget_Price.currentRow()-3)
             # self.tableWidget_Price.verticalScrollBar().
 
@@ -401,7 +536,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
     def price_table_update(self, price_dict):
         bids_loc = []
         asks_loc = []
-        if self._price_active:
+        if self._price_active&(price_dict['ProdCode'].decode('GBK') == self.lineEdit_ProdCode.text()):
             for i in range(5):
                 # bid.append((price_dict['Bid'][i], ))
                 # ask.append((price_dict['Ask'][i], price_dict['AskQty'][i]))
@@ -441,18 +576,26 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         self.label_long_info.setText(f'@{bid}->{bid + toler}')
         self.label_short_info.setText(f'@{ask}->{ask - toler}')
 
-    def position_takeprofit_info_update(self):
-        trades = get_all_trades_by_array()
-        current_trades = [trade for trade in trades if trade.ProdCode.decode('GBK') == self.lineEdit_ProdCode.text()].sort(key=lambda x:x.IntOrderNo)
+    def position_takeprofit_info_update(self, trades_info):
+        # trades = get_all_trades_by_array()
+        current_trades = [trade for trade in trades_info if trade['ProdCode'].decode('GBK') == self.lineEdit_ProdCode.text()]
+        pos = get_pos_by_product(self.lineEdit_ProdCode.text())
+        pre_pos = pos.Qty
+        pre_pos_price = pos.TotalAmt  / pre_pos if pre_pos !=0 else 0
+            # .sort(key=lambda x:x['IntOrderNo'])
         self.trade_long_queue.clear()
         self.trade_short_queue.clear()
-        for t in current_trades:
-            trade_dict = {}
-            for name, c_type in t._fields_:
-                trade_dict[name] = getattr(t, name)
+        if pre_pos > 0:
+            self.trade_long_queue.extend([pre_pos_price] * pre_pos)
+        elif pre_pos < 0:
+            self.trade_short_queue.extend([pre_pos_price] * (-pre_pos))
 
-            current_trade = [trade_dict['AvgPrice']] * trade_dict['Qty']
-            if trade_dict['BuySell'].decode('GBK') == 'B':
+        print(f'{pre_pos}@{pre_pos_price}')
+
+
+        for t in current_trades:
+            current_trade = [t['AvgPrice']] * t['Qty']
+            if t['BuySell'].decode('GBK') == 'B':
                 self.trade_long_queue.extend(current_trade)
             else:
                 self.trade_short_queue.extend(current_trade)
@@ -460,6 +603,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         close_pos_takeprofit = reduce(add, [s-l for l, s in zip(self.trade_long_queue, self.trade_short_queue)])
         long_pos_num = len(self.trade_long_queue)
         short_pos_num = len(self.trade_short_queue)
+        print(long_pos_num, short_pos_num)
         holding_pos_num = long_pos_num - short_pos_num
 
         if  long_pos_num == short_pos_num:
@@ -474,9 +618,9 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         self.label_pos.setText(f'{self.holding_pos[0]}@{self.holding_pos[1]:,.2f}')
 
     def holding_profit(self, price_dict):
-        profit = (price_dict['Last'][0] - self.holding_pos[1]) * self.holding_pos[0]
-        self.label_holding_porfit.setText(f'{profit:,.2f}')
-
+        if price_dict['ProdCode'].decode('GBK') == self.lineEdit_ProdCode.text():
+            profit = (price_dict['Last'][0] - self.holding_pos[1]) * self.holding_pos[0]
+            self.label_holding_porfit.setText(f'{profit:,.2f}')
 
     def doubleclick_order(self, row, column):
         price = float(self.tableWidget_Price.item(row, 4).text())
@@ -533,6 +677,8 @@ class MainWindow(QtWidgets.QMainWindow):
                                                QtWidgets.QMessageBox.No)
         if reply == QtWidgets.QMessageBox.Yes:
             a0.accept()
+            logout()
+            unintialize()
             pid = os.getpid()
             os.system(f'taskkill /F /PID {pid}')
         else:

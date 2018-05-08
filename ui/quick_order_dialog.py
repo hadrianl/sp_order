@@ -98,6 +98,10 @@ class Ui_Dialog_quick_order(object):
         self.horizontalLayout_10.addLayout(self.verticalLayout)
         spacerItem2 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.horizontalLayout_10.addItem(spacerItem2)
+        self.pushButton_close_position = QtWidgets.QPushButton(Dialog_quick_order)
+        self.pushButton_close_position.setEnabled(False)
+        self.pushButton_close_position.setObjectName("pushButton_close_position")
+        self.horizontalLayout_10.addWidget(self.pushButton_close_position)
         self.verticalLayout_4.addLayout(self.horizontalLayout_10)
         self.horizontalLayout_8 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_8.setObjectName("horizontalLayout_8")
@@ -210,6 +214,7 @@ class Ui_Dialog_quick_order(object):
         self.checkBox_Lock.toggled['bool'].connect(self.comboBox_VaildType.setEnabled)
         self.checkBox_Lock.toggled['bool'].connect(self.checkBox_OrderOptions.setEnabled)
         self.checkBox_Lock.toggled['bool'].connect(self.lineEdit_ProdCode.setDisabled)
+        self.checkBox_Lock.toggled['bool'].connect(self.pushButton_close_position.setEnabled)
         QtCore.QMetaObject.connectSlotsByName(Dialog_quick_order)
 
     def retranslateUi(self, Dialog_quick_order):
@@ -221,6 +226,7 @@ class Ui_Dialog_quick_order(object):
         self.label_3.setText(_translate("Dialog_quick_order", "持仓："))
         self.label_4.setText(_translate("Dialog_quick_order", "持仓盈亏："))
         self.label_5.setText(_translate("Dialog_quick_order", "平仓盈亏："))
+        self.pushButton_close_position.setText(_translate("Dialog_quick_order", "一键平仓"))
         self.pushButton_long.setText(_translate("Dialog_quick_order", "追价买入"))
         self.pushButton_short.setText(_translate("Dialog_quick_order", "追价沽出"))
         self.label_9.setText(_translate("Dialog_quick_order", "追价点数"))
