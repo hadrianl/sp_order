@@ -6,7 +6,7 @@
 #
 # WARNING! All changes made in this file will be lost!
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 
 class Ui_Dialog_quick_order(object):
     def setupUi(self, Dialog_quick_order):
@@ -255,4 +255,4 @@ class Ui_Dialog_quick_order(object):
         item.setText(_translate("Dialog_quick_order", "删"))
         self.pushButton_price_to_middle.setText(_translate("Dialog_quick_order", "置中"))
 
-from ui.baseitems import QInfoWidget
+from baseitems import QInfoWidget

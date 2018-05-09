@@ -5,19 +5,18 @@
 # @File    : Spfunc.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 
-from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QSize, QColor, QFont, QRect, QMessageBox,pyqtSignal, QTableWidgetItem
+from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QColor, QFont, QMessageBox,pyqtSignal, QTableWidgetItem
 from PyQt5 import QtWidgets, QtCore
 from PyQt5 import QtGui, Qt
-import sys
+
 from ui.order_dialog import Ui_Dialog_order
 from ui.acc_info import Ui_Form_acc_info
 from ui.sp_login import Ui_Dialog_sp_login
 from ui.quick_order_dialog import Ui_Dialog_quick_order
 from ui.order_comfirm_dialog import Ui_Dialog_order_comfirm
 from ui.close_position_dialog import Ui_Dialog_close_position
-from ui.baseitems import QPriceUpdate
-
-import datetime as dt
+from baseitems import QPriceUpdate, QPubOrder, QSubOrder
+from ui.order_assistant_widget import Ui_Form_OrderAssistant
 from spapi.spAPI import *
 from spapi.conf.util import ORDER_VALIDTYPE
 import os
@@ -213,10 +212,37 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                 comfirm_order.show()
                 comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
 
+    def oco_close(self, prodcode, net_qty, tp, sl):
+        print( prodcode, net_qty, tp, sl)
+        self.comboBox_CondType.setCurrentIndex(2)
+        self._price_flag = False
+        self._oco_sl_flag = False
+        if net_qty > 0:
+            self.lineEdit_ProdCode.setText(prodcode)
+            self.lineEdit_ProdCode.update()
+            self.radioButton_sell2.toggle()
+            self.spinBox_Qty.setValue(net_qty)
+            self.spinBox_Price.setValue(tp)
+            self.spinBox_oco_StopLevel.setValue(sl)
+            self.spinBox_oco_toler.setValue(5)
+            self.show()
+            self.checkBox_lock.setChecked(True)
+        elif net_qty < 0:
+            self.lineEdit_ProdCode.setText(prodcode)
+            self.lineEdit_ProdCode.update()
+            self.radioButton_buy2.toggle()
+            self.spinBox_Qty.setValue(-net_qty)
+            self.spinBox_Price.setValue(tp)
+            self.spinBox_oco_StopLevel.setValue(sl)
+            self.spinBox_oco_toler.setValue(5)
+            self.show()
+            self.checkBox_lock.setChecked(True)
+
 class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
     warning_sig = pyqtSignal(str, str)
     info_sig = pyqtSignal(str, str)
     acc_info_sig = pyqtSignal(float)
+    pos_info_sig = pyqtSignal(dict)
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_acc_info.__init__(self)
@@ -227,6 +253,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.setWindowFlags(Qt.Qt.Window)
         self.Order = OrderDialog(self.parent())
         self.QuickOrder = QuickOrderDialog(self.parent())
+        self.OrderAssistant = OrderAssistantWidget(self.parent())
         self.qprice = QPriceUpdate()
         self.message = QMessageBox(self)
         self.message.setModal(True)
@@ -246,14 +273,18 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.qprice.price_update_sig.connect(self.update_pos_info)
         self.pushButton_Order.toggled.connect(self.Order.setVisible)
         self.pushButton_QuickOrder.toggled.connect(self.QuickOrder.setVisible)
-        self.Order.lineEdit_ProdCode.textEdited.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))
-        self.QuickOrder.lineEdit_ProdCode.textEdited.connect(lambda text: self.Order.lineEdit_ProdCode.setText(text))
+        self.Order.lineEdit_ProdCode.textChanged.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))
+        self.QuickOrder.lineEdit_ProdCode.textChanged.connect(lambda text: self.Order.lineEdit_ProdCode.setText(text))
         self.Order.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)
         self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)
         self.warning_sig.connect(lambda title, text: self.message.warning(self.parent(), title, text))
         self.info_sig.connect(lambda title, text: self.message.information(self.parent(), title, text))
-        self.pushButton_test.released.connect(lambda :print(load_productinfolist_by_code('HSI')))
+        # self.pushButton_test.released.connect(lambda :print(get_product_by_code('HSIK8')))
         self.acc_info_sig.connect(self.update_acc_info)
+        self.pushButton_OrderAssistant.toggled.connect(self.OrderAssistant.setVisible)
+        self.pos_info_sig.connect(self.OrderAssistant.calc_amount_base)
+        self.OrderAssistant.pushButton_calc_tp_sl.released.connect(lambda :self.OrderAssistant.calc_amount_base(self.pos_info))
+        self.OrderAssistant.oco_close_sig.connect(self.Order.oco_close)
 
     def update_pos_info(self, price_dict):
         for t in range(self.tableWidget_pos.rowCount()):
@@ -262,14 +293,14 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
                 # AccInfo.tableWidget_pos.update_item_sig.emit(t, 8, str(price_dict['Last'][0]))
                 pos = self.pos_info[price_dict['ProdCode'].decode()]
                 net_pos = pos['Qty'] + pos['LongQty'] - pos['ShortQty']
-                amt = (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt']) / abs(net_pos) if net_pos != 0 else 0
+                amt = (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt']) / abs(net_pos) if net_pos != 0 else (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt'])
                 self.tableWidget_pos.item(t, 8).setText(str(price_dict['Last'][0]))
                 leverage = int(self.tableWidget_pos.item(t, 13).text())
-                PL = (net_pos * (price_dict['Last'][0] - amt)) * leverage
+                PL = (net_pos * (price_dict['Last'][0] - amt)) * leverage if net_pos != 0 else (0 - amt) * leverage
                 self.tableWidget_pos.item(t, 9).setText(f"{PL:.2f}HKD")
-        self.tableWidget_pos.viewport().update()
-        self.PL[prodcode] = PL
-        self.acc_info_sig.emit(sum(self.PL.values()))
+                self.tableWidget_pos.viewport().update()
+                self.PL[prodcode] = PL
+                self.acc_info_sig.emit(sum(self.PL.values()))
 
     def update_trade_info(self, trade_dict):
         self.trades_info.append(trade_dict)
@@ -308,16 +339,18 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
 
 
 class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
-    login_comfirm_sig = pyqtSignal()
+    login_error_sig = pyqtSignal(str)
     def __init__(self, parent=None):
         QDialog.__init__(self, parent)
         Ui_Dialog_sp_login.__init__(self)
         self.setupUi(self)
+        self.login_error_sig.connect(self.login_waring)
         self.login_info = []
         self.init_info()
 
     def login_waring(self, text):
-        QtWidgets.QMessageBox.warning(self,'登录错误',text)
+        QtWidgets.QMessageBox.critical(self,'CRITICAL-登录',text)
+
 
     def set_info(self, info):
         self.lineEdit_host.setText(info['host'])
@@ -452,11 +485,11 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         try:
             prodcode = self.lineEdit_ProdCode.text()
             pos = get_pos_by_product(prodcode)
-            net_pos = pos.DepQty + pos.LongQty - pos.ShortQty
+            net_pos = pos.Qty + pos.LongQty - pos.ShortQty
             if net_pos > 0:
-                ClosePositionDialog('S', prodcode, net_pos)
+                ClosePositionDialog('S', prodcode, net_pos, parent=self)
             elif net_pos < 0:
-                ClosePositionDialog('B', prodcode, -net_pos)
+                ClosePositionDialog('B', prodcode, -net_pos, parent=self)
             else:
                 QMessageBox.warning(self, 'WARNING-平仓', f'{prodcode}没有仓位')
         except Exception as e:
@@ -578,49 +611,68 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
 
     def position_takeprofit_info_update(self, trades_info):
         # trades = get_all_trades_by_array()
-        current_trades = [trade for trade in trades_info if trade['ProdCode'].decode('GBK') == self.lineEdit_ProdCode.text()]
-        pos = get_pos_by_product(self.lineEdit_ProdCode.text())
-        pre_pos = pos.Qty
-        pre_pos_price = pos.TotalAmt  / pre_pos if pre_pos !=0 else 0
-            # .sort(key=lambda x:x['IntOrderNo'])
-        self.trade_long_queue.clear()
-        self.trade_short_queue.clear()
-        if pre_pos > 0:
-            self.trade_long_queue.extend([pre_pos_price] * pre_pos)
-        elif pre_pos < 0:
-            self.trade_short_queue.extend([pre_pos_price] * (-pre_pos))
-
-        print(f'{pre_pos}@{pre_pos_price}')
-
-
-        for t in current_trades:
-            current_trade = [t['AvgPrice']] * t['Qty']
-            if t['BuySell'].decode('GBK') == 'B':
-                self.trade_long_queue.extend(current_trade)
-            else:
-                self.trade_short_queue.extend(current_trade)
-
-        close_pos_takeprofit = reduce(add, [s-l for l, s in zip(self.trade_long_queue, self.trade_short_queue)])
-        long_pos_num = len(self.trade_long_queue)
-        short_pos_num = len(self.trade_short_queue)
-        print(long_pos_num, short_pos_num)
-        holding_pos_num = long_pos_num - short_pos_num
-
-        if  long_pos_num == short_pos_num:
-            self.holding_pos = (0, 0)
-        elif long_pos_num > short_pos_num:
-            self.holding_pos = (holding_pos_num, sum(self.trade_long_queue[-1:-(abs(long_pos_num-short_pos_num)+1):-1]) / holding_pos_num)
+        prodcode = self.lineEdit_ProdCode.text()
+        current_trades = [trade for trade in trades_info if trade['ProdCode'].decode('GBK') == prodcode]
+        if 'HSI' in prodcode:
+            leverage = 50
+        elif 'MHI' in prodcode:
+            leverage = 10
         else:
-            self.holding_pos = (holding_pos_num, sum(self.trade_short_queue[-1:-(abs(long_pos_num-short_pos_num)+1):-1]) / holding_pos_num)
+            leverage = 1
+        try:
+            pos = get_pos_by_product(self.lineEdit_ProdCode.text())
+        except Exception as e:
+            print(e)
+        else:
+            pre_pos = pos.Qty
+            pre_pos_price = pos.TotalAmt  / pre_pos if pre_pos !=0 else 0
+                # .sort(key=lambda x:x['IntOrderNo'])
+            self.trade_long_queue.clear()
+            self.trade_short_queue.clear()
 
-        self.label_closed_profit.setText(f'{close_pos_takeprofit:,.2f}')
+            for t in current_trades:
+                current_trade = [t['AvgPrice']] * t['Qty']
+                if t['BuySell'].decode('GBK') == 'B':
+                    self.trade_long_queue.extend(current_trade)
+                else:
+                    self.trade_short_queue.extend(current_trade)
+            if pre_pos > 0:
+                self.trade_long_queue.extend([pre_pos_price] * pre_pos)
+            elif pre_pos < 0:
+                self.trade_short_queue.extend([pre_pos_price] * (-pre_pos))
 
-        self.label_pos.setText(f'{self.holding_pos[0]}@{self.holding_pos[1]:,.2f}')
+            close_pos_takeprofit = reduce(add, [s-l for l, s in zip(self.trade_long_queue, self.trade_short_queue) ]) if len(self.trade_long_queue) != 0 and len(self.trade_short_queue) != 0 else 0
+            print(self.trade_long_queue)
+            print(self.trade_short_queue)
+            long_pos_num = len(self.trade_long_queue)
+            short_pos_num = len(self.trade_short_queue)
+
+            print(f'{pre_pos}@{pre_pos_price}')
+            print(long_pos_num, short_pos_num)
+            holding_pos_num = long_pos_num - short_pos_num
+
+            if  long_pos_num == short_pos_num:
+                self.holding_pos = (0, 0)
+            elif long_pos_num > short_pos_num:
+                self.holding_pos = (holding_pos_num, sum(self.trade_long_queue[-1:-(abs(long_pos_num-short_pos_num)+1):-1]) / holding_pos_num)
+            else:
+                self.holding_pos = (holding_pos_num, sum(self.trade_short_queue[-1:-(abs(long_pos_num-short_pos_num)+1):-1]) / holding_pos_num)
+
+            self.label_closed_profit.setText(f'{close_pos_takeprofit * leverage:,.2f}')
+
+            self.label_pos.setText(f'{self.holding_pos[0]}@{self.holding_pos[1]:,.2f}')
 
     def holding_profit(self, price_dict):
-        if price_dict['ProdCode'].decode('GBK') == self.lineEdit_ProdCode.text():
+        prodcode = self.lineEdit_ProdCode.text()
+        if 'HSI' in prodcode:
+            leverage = 50
+        elif 'MHI' in prodcode:
+            leverage = 10
+        else:
+            leverage = 1
+        if price_dict['ProdCode'].decode('GBK') == prodcode:
             profit = (price_dict['Last'][0] - self.holding_pos[1]) * self.holding_pos[0]
-            self.label_holding_porfit.setText(f'{profit:,.2f}')
+            self.label_holding_porfit.setText(f'{profit * leverage:,.2f}')
 
     def doubleclick_order(self, row, column):
         price = float(self.tableWidget_Price.item(row, 4).text())
@@ -646,6 +698,45 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             self.order(buysell, limit_price)
 
 
+class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
+    oco_close_sig = pyqtSignal(str, int, float, float)
+    def __init__(self, parent=None):
+        QtWidgets.QWidget.__init__(self, parent)
+        Ui_Form_OrderAssistant.__init__(self)
+        self.setupUi(self)
+        self.setWindowFlags(Qt.Qt.Window)
+        self.init_signal()
+
+    def init_signal(self):
+        self.pushButton_OCO_close_position.released.connect(self.oco_close_position)
+
+    def calc_amount_base(self, pos_info):
+        prodcode = self.lineEdit_ProdCode.text()
+        p = pos_info.get(prodcode)
+        if p:
+            net_amt = p['TotalAmt'] + p['LongTotalAmt'] - p['ShortTotalAmt']
+            self.net_qty = p['Qty'] + p['LongQty'] - p['ShortQty']
+            self.tp = (net_amt + self.spinBox_takeprofit_amount.value() / p['leverage']) / self.net_qty if self.net_qty != 0 else 0
+            self.sl = (net_amt + self.spinBox_stoploss_amount.value() / p['leverage']) / self.net_qty if self.net_qty != 0 else 0
+            self.lineEdit_takeprofit_price.setText(f'{self.net_qty}@{self.tp:.2f}')
+            self.lineEdit_stoploss_price.setText(f'{self.net_qty}@{self.sl:.2f}')
+        else:
+            # QMessageBox.warning(self, 'WARING-计算', f'合约{prodcode}未有任何持仓')
+            ...
+
+    def oco_close_position(self):
+        prodcode = self.lineEdit_ProdCode.text()
+        net_qty = getattr(self, 'net_qty', 0)
+        tp = getattr(self, 'tp', 0)
+        sl = getattr(self, 'sl', 0)
+        if net_qty != 0:
+            self.oco_close_sig.emit(prodcode, net_qty, tp, sl)
+        else:
+            QMessageBox.warning(self, 'WARING-双向限价平仓', f'合约{prodcode}未有任何持仓，无法下平仓指令')
+
+
+
+
 class ComfirmDialog(QtWidgets.QDialog, Ui_Dialog_order_comfirm):
     def __init__(self, parent=None, **kwargs):
         QtWidgets.QDialog.__init__(self, parent)
@@ -667,9 +758,40 @@ class ComfirmDialog(QtWidgets.QDialog, Ui_Dialog_order_comfirm):
         self.label_VaildTime.setText(validtime)
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __int__(self, parent=None, *args, **kwargs):
+    login_sig = pyqtSignal()
+    init_api_sig = pyqtSignal()
+    info_sig = pyqtSignal(str, str, int)
+    def __init__(self, parent=None, *args, **kwargs):
         QtWidgets.QMainWindow.__init__(self, parent, *args, **kwargs)
+        self.timer = QtCore.QTimer(self)
+        self.init_signal()
+        # self.init_order_follower()
         # self.setWindowTitle('Sharp Point Order System --- Carry Investment')
+
+    def init_signal(self):
+        self.info_sig.connect(self.popup)
+
+    def popup(self,title, context, e_time=0):
+        mb = QMessageBox(self)
+        mb.move(self.width() - mb.width() - 100, 0)
+        mb.setWindowTitle(title)
+        mb.setText(context)
+        mb.show()
+        if e_time != 0:
+            self.timer.singleShot(5000, mb.close)
+
+
+    def init_order_follower(self):
+        self.order_pub = QPubOrder(self)
+        self.order_sub = QSubOrder(self.order_pub.order_queue, self)
+        self.order_pub.finished.connect(lambda :self.popup('<INFO-跟单>', '交易发布已停止', 8000))
+        self.order_sub.finished.connect(lambda: self.popup('<INFO-跟单>', '交易订阅已停止', 5000))
+        self.order_pub.start()
+        self.order_sub.start()
+
+    def deinit_order_follower(self):
+        self.order_pub.close()
+        self.order_sub.close()
 
     def closeEvent(self, a0: QtGui.QCloseEvent):
         reply = QtWidgets.QMessageBox.question(self, '退出', "是否要退出SP下单？",

@@ -28,11 +28,11 @@ def addOrder(**kwargs):
 
 def info_handle(type, info,  handle_type=0, handler=None, *args, **kwargs):
     if handle_type == 0:
-        print('*LOCAL*' + type + info)
+        # print('*LOCAL*' + type + info)
         if handler is not None:
             handle_queue.put([handler, args, kwargs])
     elif handle_type == 1:
-        print('*LOCAL*' + type + info)
+        # print('*LOCAL*' + type + info)
         if handler is not None:
             handle_queue.put([handler, args, kwargs])
         # AccInfo.message_sig.emit('WARNING', handler.decode('GBK'))
@@ -162,6 +162,14 @@ def _update_postion(p):
     pos_dict = {}
     for name, c_type in p._fields_:
         pos_dict[name] = getattr(p, name)
+    prodcode = pos_dict['ProdCode'].decode()
+    if 'HSI' in prodcode:
+        leverage = 50
+    elif 'MHI' in prodcode:
+        leverage = 10
+    else:
+        leverage = 1
+    pos_dict.update(leverage=leverage)
     AccInfo.pos_info[pos_dict['ProdCode'].decode('GBK')] = pos_dict
     r = 0
     for i in range(AccInfo.tableWidget_pos.rowCount()):
@@ -175,13 +183,7 @@ def _update_postion(p):
     today_net_pos_amt = pos_dict['LongTotalAmt'] - pos_dict['ShortTotalAmt']
     net_pos = pos_dict['Qty'] + today_net_pos
     net_pos_amt = pos_dict['TotalAmt'] + today_net_pos_amt
-    prodcode = pos_dict['ProdCode'].decode()
-    if 'HSI' in prodcode:
-        leverage = 50
-    elif 'MHI' in prodcode:
-        leverage = 10
-    else:
-        leverage = 1
+
     pos_info = [prodcode,
                 '',
                 f"{pos_dict['Qty']}@{(pos_dict['TotalAmt']/abs(pos_dict['Qty'])) if pos_dict['Qty'] != 0 else 0:.2f}",
@@ -195,7 +197,7 @@ def _update_postion(p):
                 '',
                 f"{pos_dict['ExchangeRate']:,}",
                 f"{pos_dict['PLBaseCcy']:,}",
-                f'{leverage}']
+                f"{pos_dict['leverage']}"]
 
     for i, s in zip(range(14), map(str, pos_info)):
         AccInfo.tableWidget_pos.setItem(r, i, QTableWidgetItem(s))
@@ -205,6 +207,8 @@ def _update_postion(p):
     global sub_list
     if prodcode not in sub_list:
         sub_list.append(prodcode)
+
+    AccInfo.pos_info_sig.emit(AccInfo.pos_info)
 
     print('pos:', pos_dict)
     return pos_dict
@@ -336,8 +340,9 @@ def account_info_push(acc_info):
 
 @on_load_trade_ready_push  # 登入后，登入前已存的成交信息推送
 def trade_ready_push(rec_no, trade):
-    info_handle('<成交>',
-                f'历史成交记录--NO:{rec_no}--{trade.OpenClose.decode()}成交@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}', 0, _update_trade, trade)
+    # info_handle('<成交>',
+    #             f'历史成交记录--NO:{rec_no}--{trade.OpenClose.decode()}成交@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}', 0, _update_trade, trade)
+    ...
 
 @on_account_position_push  # 普通客户登入后返回登入前的已存在持仓信息
 def account_position_push(pos):
@@ -352,12 +357,11 @@ def business_date_reply(business_date):
 def reply(user_id, ret_code, ret_msg):
     if ret_code == 0:
         global local_login
-        info_handle('<账户>', f'{user_id.decode()}登录成功')
+        info_handle('<账户>', f'{user_id.decode()}登录成功', 0,  win.login_sig.emit)
         local_login = True
-        # Login.login_comfirm_sig.emit()
 
     else:
-        info_handle('<账户>', f'{user_id.decode()}登录失败--errcode:{ret_code}--errmsg:{ret_msg.decode()}')
+        info_handle('<账户>', f'{user_id.decode()}登录失败--errcode:{ret_code}--errmsg:{ret_msg.decode()}', 0, Login.login_error_sig.emit, f'登录失败-{ret_msg.decode()}')
         local_login = False
 
 # ----------------------------------------行情数据主推---------------------------------------------------------------------------------------------------
@@ -378,7 +382,7 @@ def price_update(price):
 
 @on_connecting_reply  # 连接状态改变时调用
 def connecting_reply(host_id, con_status):
-    info_handle('<连接>', f'{HOST_TYPE[host_id]}状态改变--{HOST_CON_STATUS[con_status]}', 0, subprice, host_id, con_status)
+    info_handle('<连接>', f'{HOST_TYPE[host_id]}状态改变--{HOST_CON_STATUS[con_status]}')
 
 # -----------------------------------------------登入后的新信息回调------------------------------------------------------------------------------
 @on_order_request_failed  # 订单请求失败时候调用
@@ -400,8 +404,8 @@ def order_report(rec_no, order):
     info_handle('<订单>', f'编号:{rec_no}-@{order.ProdCode.decode()}-Status:{ORDER_STATUS[order.Status]}', 0, _update_order, order)
 
 @on_trade_report  # 成交记录更新后回调出推送新的成交记录
-def trade_report(rec_no, trade):...
-    # info_handle('<成交>', f'{rec_no}新成交{trade.OpenClose.decode()}--@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}', 0, _update_trade, trade)
+def trade_report(rec_no, trade):
+    info_handle('<成交>', f'{rec_no}新成交{trade.OpenClose.decode()}--@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}', 0, _update_trade, trade)
 
 @on_updated_account_position_push  # 新持仓信息
 def updated_account_position_push(pos):
@@ -461,12 +465,11 @@ def init_spapi():
         AccInfo.bind_account(info['user_id'])
         # import time
         # time.sleep(2)
-        Login.login_comfirm_sig.emit()
+        # Login.login_comfirm_sig.emit()
         # AccInfo.toolButton_update_info.released.emit()
         # win.show()
         # win.showMaximized()
         # AccInfo.show()
-        load_instrument_list()
         # get_instrument_by_code('HSI')
         # print(get_instrument_count())
 
@@ -555,9 +558,13 @@ if __name__ == '__main__':
     update_thread.start()
 
 
-    Login.accepted.connect(lambda :init_spapi())
-    Login.login_comfirm_sig.connect(win.showMaximized)
-    Login.login_comfirm_sig.connect(AccInfo.show)
+
+    Login.pushButton_login.released.connect(win.init_api_sig)
+    win.init_api_sig.connect(lambda :init_spapi())
+    win.login_sig.connect(win.showMaximized)
+    win.login_sig.connect(AccInfo.show)
+    win.login_sig.connect(lambda :Login.close())
+    # QMessageBox.critical(Login, 'CRITICAL-登录', f'登录失败-{ret_msg.decode()}')
 
 
     def print_info(info_array):
@@ -580,7 +587,10 @@ if __name__ == '__main__':
     AccInfo.QuickOrder.checkBox_Lock.toggled.connect(lambda b:  AccInfo.QuickOrder.position_takeprofit_info_update(AccInfo.trades_info) if b else ...)
     AccInfo.toolButton_update_info.released.connect(lambda :[subscribe_price(p, 1) for p in sub_list])
 
+    # AccInfo.pushButton_test.released.connect(win.init_order_follower)
+    AccInfo.checkBox_follow_orders.toggled.connect(lambda b: win.init_order_follower() if b else win.deinit_order_follower())
 
-    # Login.lineEdit_password.setFocus()
+
+    Login.lineEdit_password.setFocus()
     Login.show()
     sys.exit(app.exec_())

@@ -77,6 +77,13 @@ class Ui_Form_acc_info(object):
         self.pushButton_test = QtWidgets.QPushButton(Form_acc_info)
         self.pushButton_test.setObjectName("pushButton_test")
         self.horizontalLayout.addWidget(self.pushButton_test)
+        self.pushButton_OrderAssistant = QtWidgets.QPushButton(Form_acc_info)
+        self.pushButton_OrderAssistant.setCheckable(True)
+        self.pushButton_OrderAssistant.setObjectName("pushButton_OrderAssistant")
+        self.horizontalLayout.addWidget(self.pushButton_OrderAssistant)
+        self.checkBox_follow_orders = QtWidgets.QCheckBox(Form_acc_info)
+        self.checkBox_follow_orders.setObjectName("checkBox_follow_orders")
+        self.horizontalLayout.addWidget(self.checkBox_follow_orders)
         spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.horizontalLayout.addItem(spacerItem)
         self.toolButton_update_info = QtWidgets.QToolButton(Form_acc_info)
@@ -345,6 +352,8 @@ class Ui_Form_acc_info(object):
         self.pushButton_Order.setText(_translate("Form_acc_info", "下单"))
         self.pushButton_QuickOrder.setText(_translate("Form_acc_info", "快速点击下单"))
         self.pushButton_test.setText(_translate("Form_acc_info", "test"))
+        self.pushButton_OrderAssistant.setText(_translate("Form_acc_info", "下单辅助"))
+        self.checkBox_follow_orders.setText(_translate("Form_acc_info", "跟单"))
         self.pushButton_del_order.setText(_translate("Form_acc_info", "删除"))
         self.pushButton_activate_order.setText(_translate("Form_acc_info", "生效"))
         self.pushButton_inactivate_order.setText(_translate("Form_acc_info", "无效"))
@@ -460,5 +469,5 @@ class Ui_Form_acc_info(object):
         item.setText(_translate("Form_acc_info", "参考兑换率(HKD)"))
         self.tabWidget_acc_info.setTabText(self.tabWidget_acc_info.indexOf(self.tab_ccy), _translate("Form_acc_info", "参考汇率"))
 
-from ui.baseitems import QInfoWidget
+from baseitems import QInfoWidget
 import ui.order_rc
