@@ -293,7 +293,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
                 # AccInfo.tableWidget_pos.update_item_sig.emit(t, 8, str(price_dict['Last'][0]))
                 pos = self.pos_info[price_dict['ProdCode'].decode()]
                 net_pos = pos['Qty'] + pos['LongQty'] - pos['ShortQty']
-                amt = (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt']) / abs(net_pos) if net_pos != 0 else (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt'])
+                amt = (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt']) / net_pos if net_pos != 0 else (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt'])
                 self.tableWidget_pos.item(t, 8).setText(str(price_dict['Last'][0]))
                 leverage = int(self.tableWidget_pos.item(t, 13).text())
                 PL = (net_pos * (price_dict['Last'][0] - amt)) * leverage if net_pos != 0 else (0 - amt) * leverage
@@ -654,9 +654,9 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             if  long_pos_num == short_pos_num:
                 self.holding_pos = (0, 0)
             elif long_pos_num > short_pos_num:
-                self.holding_pos = (holding_pos_num, sum(self.trade_long_queue[-1:-(abs(long_pos_num-short_pos_num)+1):-1]) / holding_pos_num)
+                self.holding_pos = (holding_pos_num, sum(self.trade_long_queue[-1:-(holding_pos_num + 1):-1]) / holding_pos_num)
             else:
-                self.holding_pos = (holding_pos_num, sum(self.trade_short_queue[-1:-(abs(long_pos_num-short_pos_num)+1):-1]) / holding_pos_num)
+                self.holding_pos = (holding_pos_num, sum(self.trade_short_queue[-1:-(-holding_pos_num + 1):-1]) / -holding_pos_num)
 
             self.label_closed_profit.setText(f'{close_pos_takeprofit * leverage:,.2f}')
 

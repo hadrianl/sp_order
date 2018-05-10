@@ -180,7 +180,7 @@ class QSubOrder(QThread):
                     add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}", OrderOptions=0, CondType=0, OrderType=6, Price=0)
             elif order['Status'] == 2 and order['Type'] < 6:
                 Price = order['OpenPrice']
-                Qty = order['Lots']
+                Qty = int(order['Lots'])
                 if order['Type'] == 0:
                     add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}", OrderOptions=0,
                               CondType=0, OrderType=6, Price=0)
