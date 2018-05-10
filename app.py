@@ -106,12 +106,13 @@ def update_orders():
     except Exception as e:
         print('order_Error:',e)
         raise e
+
 def _update_order(o):
     order_dict = {}
     for name, c_type in o._fields_:
         order_dict[name] = getattr(o, name)
+    AccInfo.order_info_sig.emit(order_dict)
     r = 0
-
 
     for i in range(AccInfo.tableWidget_orders.rowCount()):
         if order_dict['IntOrderNo'] == int(AccInfo.tableWidget_orders.item(i, 0).text()):
@@ -139,6 +140,7 @@ def _update_order(o):
         AccInfo.tableWidget_orders.setItem(r, i, QTableWidgetItem(s))
     AccInfo.tableWidget_orders.viewport().update()
         # AccInfo.tableWidget_orders.set_item_sig.emit(r, i, s)
+
 
     if order_dict['Status'] in [10]:
         AccInfo.tableWidget_orders.removeRow(r)
@@ -179,14 +181,16 @@ def _update_postion(p):
     else:
         AccInfo.tableWidget_pos.insertRow(0)
 
+    qty = pos_dict['Qty'] if pos_dict['LongShort'] == b'B' else -pos_dict['Qty']
+    amt = pos_dict['TotalAmt'] if pos_dict['LongShort'] == b'B' else -pos_dict['TotalAmt']
     today_net_pos = pos_dict['LongQty'] - pos_dict['ShortQty']
     today_net_pos_amt = pos_dict['LongTotalAmt'] - pos_dict['ShortTotalAmt']
-    net_pos = pos_dict['Qty'] + today_net_pos
-    net_pos_amt = pos_dict['TotalAmt'] + today_net_pos_amt
+    net_pos = qty + today_net_pos
+    net_pos_amt = amt + today_net_pos_amt
 
     pos_info = [prodcode,
                 '',
-                f"{pos_dict['Qty']}@{(pos_dict['TotalAmt']/abs(pos_dict['Qty'])) if pos_dict['Qty'] != 0 else 0:.2f}",
+                f"{qty}@{(pos_dict['TotalAmt']/pos_dict['Qty']) if pos_dict['Qty'] != 0 else 0:.2f}",
                 pos_dict['DepQty'],
                 f"{pos_dict['LongQty']}@{(pos_dict['LongTotalAmt']/pos_dict['LongQty']) if pos_dict['LongQty'] != 0 else 0:.2f}",
                 f"{-pos_dict['ShortQty']}@{(pos_dict['ShortTotalAmt']/pos_dict['ShortQty']) if pos_dict['ShortQty'] != 0 else 0:.2f}",
@@ -526,7 +530,7 @@ def __get_current_pos_info():
     if row >= 0:
         prodcode = AccInfo.tableWidget_pos.item(AccInfo.tableWidget_pos.currentRow(), 0).text()
         pos = get_pos_by_product(prodcode)
-        net_pos = pos.Qty + pos.LongQty - pos.ShortQty
+        net_pos = (pos.Qty + pos.LongQty - pos.ShortQty) if pos.LongShort ==b'B' else (-pos.Qty + pos.LongQty - pos.ShortQty)
         return prodcode, net_pos
     else:
         return '', 0
@@ -537,7 +541,7 @@ def _close_position(prodcode, net_pos):
     elif net_pos < 0:
         ClosePositionDialog('B', prodcode, -net_pos, win)
     else:
-        QMessageBox.warning(win, 'WARING-平仓', '请选择需平仓的仓位')
+        QMessageBox.warning(win, 'WARING-平仓', '没有需平仓的仓位')
 
 
 
@@ -589,6 +593,9 @@ if __name__ == '__main__':
 
     # AccInfo.pushButton_test.released.connect(win.init_order_follower)
     AccInfo.checkBox_follow_orders.toggled.connect(lambda b: win.init_order_follower() if b else win.deinit_order_follower())
+
+    win.login_sig.connect(lambda :[update_accbals(), update_ccy_rate()])
+    win.login_sig.connect(lambda :win.timer.singleShot(5000, lambda :[subscribe_price(p, 1) for p in sub_list]))
 
 
     Login.lineEdit_password.setFocus()

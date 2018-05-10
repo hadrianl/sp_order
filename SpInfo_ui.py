@@ -8,7 +8,7 @@
 from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QColor, QFont, QMessageBox,pyqtSignal, QTableWidgetItem
 from PyQt5 import QtWidgets, QtCore
 from PyQt5 import QtGui, Qt
-
+import datetime as dt
 from ui.order_dialog import Ui_Dialog_order
 from ui.acc_info import Ui_Form_acc_info
 from ui.sp_login import Ui_Dialog_sp_login
@@ -17,6 +17,7 @@ from ui.order_comfirm_dialog import Ui_Dialog_order_comfirm
 from ui.close_position_dialog import Ui_Dialog_close_position
 from baseitems import QPriceUpdate, QPubOrder, QSubOrder
 from ui.order_assistant_widget import Ui_Form_OrderAssistant
+from ui.time_widget import Ui_Form_time
 from spapi.spAPI import *
 from spapi.conf.util import ORDER_VALIDTYPE
 import os
@@ -243,6 +244,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
     info_sig = pyqtSignal(str, str)
     acc_info_sig = pyqtSignal(float)
     pos_info_sig = pyqtSignal(dict)
+    order_info_sig = pyqtSignal(dict)
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_acc_info.__init__(self)
@@ -253,13 +255,15 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.setWindowFlags(Qt.Qt.Window)
         self.Order = OrderDialog(self.parent())
         self.QuickOrder = QuickOrderDialog(self.parent())
-        self.OrderAssistant = OrderAssistantWidget(self.parent())
         self.qprice = QPriceUpdate()
+        self.OrderAssistant = OrderAssistantWidget(self)
+        self.time = TimeWidget(self)
         self.message = QMessageBox(self)
         self.message.setModal(True)
         self.acc_info = {}
         self.trades_info = []
         self.pos_info = {}
+        self.order_info = {}
         self.PL = {}
         self.init_signal()
 
@@ -283,7 +287,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.acc_info_sig.connect(self.update_acc_info)
         self.pushButton_OrderAssistant.toggled.connect(self.OrderAssistant.setVisible)
         self.pos_info_sig.connect(self.OrderAssistant.calc_amount_base)
-        self.OrderAssistant.pushButton_calc_tp_sl.released.connect(lambda :self.OrderAssistant.calc_amount_base(self.pos_info))
+        # self.OrderAssistant.pushButton_calc_tp_sl.released.connect(lambda :self.OrderAssistant.calc_amount_base(self.pos_info))
         self.OrderAssistant.oco_close_sig.connect(self.Order.oco_close)
 
     def update_pos_info(self, price_dict):
@@ -292,11 +296,12 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             if  prodcode == self.tableWidget_pos.item(t, 0).text():
                 # AccInfo.tableWidget_pos.update_item_sig.emit(t, 8, str(price_dict['Last'][0]))
                 pos = self.pos_info[price_dict['ProdCode'].decode()]
-                net_pos = pos['Qty'] + pos['LongQty'] - pos['ShortQty']
-                amt = (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt']) / net_pos if net_pos != 0 else (pos['TotalAmt'] + pos['LongTotalAmt'] - pos['ShortTotalAmt'])
+                net_qty = pos['Qty'] + pos['LongQty'] - pos['ShortQty'] if pos['LongShort'] ==b'B' else -pos['Qty'] + pos['LongQty'] - pos['ShortQty']
+                totalamt = pos['TotalAmt'] if pos['LongShort'] ==b'B' else -pos['TotalAmt']
+                net_price = (totalamt + pos['LongTotalAmt'] - pos['ShortTotalAmt']) / net_qty if net_qty != 0 else (totalamt + pos['LongTotalAmt'] - pos['ShortTotalAmt'])
                 self.tableWidget_pos.item(t, 8).setText(str(price_dict['Last'][0]))
                 leverage = int(self.tableWidget_pos.item(t, 13).text())
-                PL = (net_pos * (price_dict['Last'][0] - amt)) * leverage if net_pos != 0 else (0 - amt) * leverage
+                PL = (net_qty * (price_dict['Last'][0] - net_price)) * leverage if net_qty != 0 else (0 - net_price) * leverage
                 self.tableWidget_pos.item(t, 9).setText(f"{PL:.2f}HKD")
                 self.tableWidget_pos.viewport().update()
                 self.PL[prodcode] = PL
@@ -485,7 +490,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         try:
             prodcode = self.lineEdit_ProdCode.text()
             pos = get_pos_by_product(prodcode)
-            net_pos = pos.Qty + pos.LongQty - pos.ShortQty
+            net_pos = (pos.Qty + pos.LongQty - pos.ShortQty) if pos.LongShort ==b'B' else (-pos.Qty + pos.LongQty - pos.ShortQty)
             if net_pos > 0:
                 ClosePositionDialog('S', prodcode, net_pos, parent=self)
             elif net_pos < 0:
@@ -636,10 +641,10 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
                     self.trade_long_queue.extend(current_trade)
                 else:
                     self.trade_short_queue.extend(current_trade)
-            if pre_pos > 0:
+            if pos.LongShort == b'B':
                 self.trade_long_queue.extend([pre_pos_price] * pre_pos)
-            elif pre_pos < 0:
-                self.trade_short_queue.extend([pre_pos_price] * (-pre_pos))
+            elif pos.LongShort == b'S':
+                self.trade_short_queue.extend([pre_pos_price] * pre_pos)
 
             close_pos_takeprofit = reduce(add, [s-l for l, s in zip(self.trade_long_queue, self.trade_short_queue) ]) if len(self.trade_long_queue) != 0 and len(self.trade_short_queue) != 0 else 0
             print(self.trade_long_queue)
@@ -700,22 +705,171 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
 
 class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
     oco_close_sig = pyqtSignal(str, int, float, float)
+    close_position_trigger_sig = pyqtSignal()
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_OrderAssistant.__init__(self)
         self.setupUi(self)
         self.setWindowFlags(Qt.Qt.Window)
+        self.holding_qty = 0
+        self.holding_pos_amt = 0
+        self.trailing_best_price = None
+        self.last_price = {}
         self.init_signal()
 
     def init_signal(self):
+        self.spinBox_takeprofit_amount.editingFinished.connect(lambda :self.calc_amount_base(self.parent().pos_info))
+        self.spinBox_stoploss_amount.editingFinished.connect(lambda: self.calc_amount_base(self.parent().pos_info))
         self.pushButton_OCO_close_position.released.connect(self.oco_close_position)
+        self.lineEdit_ProdCode.editingFinished.connect(lambda :self.update_holding_pos(self.parent().pos_info))
+        self.parent().pos_info_sig.connect(self.update_holding_pos)
+        self.checkBox_trailing_stop.toggled.connect(lambda b: self.parent().qprice.price_update_sig.connect(self.update_trailing_stop) if b else self.parent().qprice.price_update_sig.disconnect(self.update_trailing_stop))
+        self.parent().qprice.price_update_sig.connect(lambda p: self.lineEdit_price.setText(str(p['Last'][0])) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
+        self.parent().qprice.price_update_sig.connect(lambda p: setattr(self, 'last_price', p) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
+        self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_tp.setChecked(True) if o['ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 1 and o['Ref'].decode() =='auto_tp' else ...)
+        self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_tp.setChecked(False) if o[ 'ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 10 and o['Ref'].decode() == 'auto_tp' else ...)
+        self.checkBox_auto_tp.released.connect(lambda : self.init_auto_takeprofit() if not self.checkBox_auto_tp.isChecked() else self.deinit_auto_takeprofit())
+        self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_sl.setChecked(True) if o['ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 1 and o['Ref'].decode() =='auto_sl' else ...)
+        self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_sl.setChecked(False) if o[ 'ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 10 and o['Ref'].decode() == 'auto_sl' else ...)
+        self.checkBox_auto_sl.released.connect(lambda : self.init_auto_stoploss() if not self.checkBox_auto_sl.isChecked() else self.deinit_auto_stoploss())
+        self.lineEdit_ProdCode.editingFinished.connect(lambda :self.init_auto_tp_sl())
+
+
+    def init_auto_tp_sl(self):
+        try:
+            orders = get_orders_by_array()
+            self.checkBox_auto_tp.setChecked(True)
+            self.checkBox_auto_sl.setChecked(False)
+            for o in orders:
+                if o.Status in [1, 3] and o.ProdCode.decode() == self.lineEdit_ProdCode.text():
+                    if o.Ref.decode() == 'auto_tp':
+                        self.checkBox_auto_tp.setChecked(True)
+                    elif o.Ref.decode() =='auto_sl':
+                        self.checkBox_auto_sl.setChecked(True)
+        except Exception as e:
+            print(e)
+
+
+    def init_auto_takeprofit(self):
+        if self.lineEdit_ProdCode.text() != self.last_price.get('ProdCode', b'').decode():
+            QMessageBox.critical(self, 'CRITICAL-自动止盈', '请检查合约代码')
+            return
+        price = self.spinBox_tp_price.value()
+        if self.holding_qty > 0:
+            if price <= self.last_price['Last'][0]:
+                QMessageBox.warning(self, 'WARING-自动止盈', '止盈价需高于现价')
+            else:
+                add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='S', OrderOptions=0,
+                          Qty=int(self.holding_qty), ValidType=0, CondType=0, OrderType=0, Price=price,
+                          Ref='auto_tp')
+        elif self.holding_qty < 0:
+            if price >= self.last_price['Last'][0]:
+                QMessageBox.warning(self, 'WARING-自动止盈', '止盈价需低于现价')
+            else:
+                add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='B', OrderOptions=0,
+                          Qty=int(-self.holding_qty), ValidType=0, CondType=0, OrderType=0, Price=price,
+                          Ref='auto_tp')
+
+    def deinit_auto_takeprofit(self):
+        try:
+            orders = get_orders_by_array()
+            for o in orders:
+                if o.Ref.decode() == 'auto_tp' and o.ProdCode.decode() == self.lineEdit_ProdCode.text():
+                    delete_order_by(o.IntOrderNo, self.lineEdit_ProdCode.text())
+        except Exception as e:
+            print(e)
+
+    def init_auto_stoploss(self):
+        if self.lineEdit_ProdCode.text() != self.last_price.get('ProdCode', b'').decode():
+            QMessageBox.critical(self, 'CRITICAL-自动止损', '请检查合约代码')
+            return
+        price = self.spinBox_sl_price.value()
+        if self.holding_qty > 0:
+            if price >= self.last_price['Last'][0]:
+                QMessageBox.warning(self, 'WARING-自动止损', '止损价需低于现价')
+            else:
+                add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='S', OrderOptions=0,
+                          Qty=int(self.holding_qty), ValidType=0, CondType=1, OrderType=0, Price=price,
+                          StopType='L', StopLevel=price - self.spinBox_stoploss_toler.value(),
+                          Ref='auto_sl')
+        elif self.holding_qty < 0:
+            if price <= self.last_price['Last'][0]:
+                QMessageBox.warning(self, 'WARING-自动止损', '止损价需高于现价')
+            else:
+                add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='B', OrderOptions=0,
+                          Qty=int(-self.holding_qty), ValidType=0, CondType=1, OrderType=0, Price=price,
+                          StopType='L', StopLevel=price + self.spinBox_stoploss_toler.value(),
+                          Ref='auto_sl')
+
+    def deinit_auto_stoploss(self):
+        try:
+            orders = get_orders_by_array()
+            for o in orders:
+                if o.Ref.decode() == 'auto_sl' and o.ProdCode.decode() == self.lineEdit_ProdCode.text():
+                    delete_order_by(o.IntOrderNo, self.lineEdit_ProdCode.text())
+        except Exception as e:
+            print(e)
+
+    def update_holding_pos(self, pos_info):
+        pos = pos_info.get(self.lineEdit_ProdCode.text())
+        if pos is not None:
+            qty = pos['Qty'] if pos['LongShort'] == b'B' else -pos['Qty']
+            amt = pos['TotalAmt'] if pos['LongShort'] == b'B' else -pos['TotalAmt']
+            today_net_pos = pos['LongQty'] - pos['ShortQty']
+            today_net_pos_amt = pos['LongTotalAmt'] - pos['ShortTotalAmt']
+            self.holding_pos_amt = amt + today_net_pos_amt
+            self.holding_qty = qty + today_net_pos
+            holding_price = self.holding_pos_amt / self.holding_qty if self.holding_qty != 0 else self.holding_pos_amt
+            self.lineEdit_holding_qty.setText(str(self.holding_qty))
+            self.lineEdit_holding_price.setText(str(holding_price))
+        else:
+            self.lineEdit_holding_qty.setText('-')
+            self.lineEdit_holding_price.setText('-')
+
+    def update_trailing_stop(self, price):
+        toler = self.spinBox_trailing_toler.value()
+        if price['ProdCode'].decode() != self.lineEdit_ProdCode.text():
+            return
+
+        if self.holding_qty > 0:
+            self.trailing_best_price = max(self.trailing_best_price, price['Last'][0]) if self.trailing_best_price != None else price['Last'][0]
+            self.trailing_close_price = self.trailing_best_price - toler
+            print(self.trailing_best_price, self.trailing_close_price)
+            if self.trailing_close_price >= price['Last'][0]:
+                self.close_position_trigger_sig.emit()
+                self.checkBox_trailing_stop.setChecked(False)
+                self.trailing_best_price = None
+                self.lineEdit_best_price.setText('-')
+                self.lineEdit_sl_close_price.setText('-')
+            else:
+                self.lineEdit_best_price.setText(str(self.trailing_best_price))
+                self.lineEdit_sl_close_price.setText(str(self.trailing_close_price))
+                self.horizontalSlider_toler.setMaximum(int(self.trailing_best_price))
+                self.horizontalSlider_toler.setMinimum(int(self.trailing_close_price))
+                self.horizontalSlider_toler.setValue(int(price['Last'][0]))
+        elif self.holding_qty < 0:
+            self.trailing_best_price = min(self.trailing_best_price, price['Last'][0]) if self.trailing_best_price != None else price['Last'][0]
+            self.trailing_close_price = self.trailing_best_price + toler
+            print(self.trailing_best_price, self.trailing_close_price)
+            self.horizontalSlider_toler.setValue(int(price['Last'][0]))
+            if self.trailing_close_price <= price['Last'][0]:
+                self.close_position_trigger_sig.emit()
+                self.checkBox_trailing_stop.setChecked(False)
+                self.trailing_best_price = None
+                self.lineEdit_best_price.setText('-')
+                self.lineEdit_sl_close_price.setText('-')
+            else:
+                self.lineEdit_best_price.setText(str(self.trailing_best_price))
+                self.lineEdit_sl_close_price.setText(str(self.trailing_close_price))
+                self.horizontalSlider_toler.setMaximum(int(self.trailing_best_price))
+                self.horizontalSlider_toler.setMinimum(int(self.trailing_close_price))
 
     def calc_amount_base(self, pos_info):
         prodcode = self.lineEdit_ProdCode.text()
         p = pos_info.get(prodcode)
         if p:
-            net_amt = p['TotalAmt'] + p['LongTotalAmt'] - p['ShortTotalAmt']
-            self.net_qty = p['Qty'] + p['LongQty'] - p['ShortQty']
+            net_amt = p['TotalAmt'] + p['LongTotalAmt'] - p['ShortTotalAmt'] if p['LongShort'] == b'B' else -p['TotalAmt'] + p['LongTotalAmt'] - p['ShortTotalAmt']
+            self.net_qty = p['Qty'] + p['LongQty'] - p['ShortQty'] if p['LongShort'] == b'B'else -p['Qty'] + p['LongQty'] - p['ShortQty']
             self.tp = (net_amt + self.spinBox_takeprofit_amount.value() / p['leverage']) / self.net_qty if self.net_qty != 0 else 0
             self.sl = (net_amt + self.spinBox_stoploss_amount.value() / p['leverage']) / self.net_qty if self.net_qty != 0 else 0
             self.lineEdit_takeprofit_price.setText(f'{self.net_qty}@{self.tp:.2f}')
@@ -805,6 +959,47 @@ class MainWindow(QtWidgets.QMainWindow):
             os.system(f'taskkill /F /PID {pid}')
         else:
             a0.ignore()
+
+class TimeWidget(QtWidgets.QWidget, Ui_Form_time):
+    def __init__(self, parent=None):
+        QtWidgets.QWidget.__init__(self, parent)
+        Ui_Form_time.__init__(self)
+        self.setupUi(self)
+        self.setWindowFlags(Qt.Qt.Window | Qt.Qt.FramelessWindowHint)
+        self.timer = QtCore.QTimer(self)
+        self.init_signal()
+        self.move((QDesktopWidget().width() -self.width()) / 2, 30)
+
+
+    def init_signal(self):
+        self.timer.timeout.connect(self.update_sys_time)
+        self.timer.start(1000)
+        self.parent().qprice.price_update_sig.connect(lambda p:self.update_data_time(p['Timestamp']))
+        self.parent().parent().login_sig.connect(self.show)
+
+    def update_sys_time(self):
+        t = dt.datetime.now().time()
+        self.label_sys_time.setText(str(t)[:8])
+
+    def update_data_time(self, timestamp):
+        t = dt.datetime.fromtimestamp(timestamp).time()
+        self.label_data_time.setText(str(t)[:8])
+
+    def mouseMoveEvent(self, e: QtGui.QMouseEvent):  # 重写移动事件
+        if self._isTracking:
+            self._endPos = e.pos() - self._startPos
+            self.move(self.pos() + self._endPos)
+
+    def mousePressEvent(self, e: QtGui.QMouseEvent):
+        if e.button() == QtCore.Qt.LeftButton:
+            self._isTracking = True
+            self._startPos = QtCore.QPoint(e.x(), e.y())
+
+    def mouseReleaseEvent(self, e: QtGui.QMouseEvent):
+        if e.button() == QtCore.Qt.LeftButton:
+            self._isTracking = False
+            self._startPos = None
+            self._endPos = None
 
 
 if __name__ == '__main__':
