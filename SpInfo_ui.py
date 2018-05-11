@@ -647,13 +647,8 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
                 self.trade_short_queue.extend([pre_pos_price] * pre_pos)
 
             close_pos_takeprofit = reduce(add, [s-l for l, s in zip(self.trade_long_queue, self.trade_short_queue) ]) if len(self.trade_long_queue) != 0 and len(self.trade_short_queue) != 0 else 0
-            print(self.trade_long_queue)
-            print(self.trade_short_queue)
             long_pos_num = len(self.trade_long_queue)
             short_pos_num = len(self.trade_short_queue)
-
-            print(f'{pre_pos}@{pre_pos_price}')
-            print(long_pos_num, short_pos_num)
             holding_pos_num = long_pos_num - short_pos_num
 
             if  long_pos_num == short_pos_num:
@@ -721,8 +716,10 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         self.spinBox_takeprofit_amount.editingFinished.connect(lambda :self.calc_amount_base(self.parent().pos_info))
         self.spinBox_stoploss_amount.editingFinished.connect(lambda: self.calc_amount_base(self.parent().pos_info))
         self.pushButton_OCO_close_position.released.connect(self.oco_close_position)
-        self.lineEdit_ProdCode.editingFinished.connect(lambda :self.update_holding_pos(self.parent().pos_info))
-        self.parent().pos_info_sig.connect(self.update_holding_pos)
+        # self.lineEdit_ProdCode.editingFinished.connect(self.update_holding_pos)
+        # self.parent().pos_info_sig.connect(lambda p:self.update_holding_pos())
+        self.lineEdit_ProdCode.editingFinished.connect(self.update_holding_pos_LIFO)
+        self.parent().pos_info_sig.connect(lambda p:self.update_holding_pos_LIFO())
         self.checkBox_trailing_stop.toggled.connect(lambda b: self.parent().qprice.price_update_sig.connect(self.update_trailing_stop) if b else self.parent().qprice.price_update_sig.disconnect(self.update_trailing_stop))
         self.parent().qprice.price_update_sig.connect(lambda p: self.lineEdit_price.setText(str(p['Last'][0])) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
         self.parent().qprice.price_update_sig.connect(lambda p: setattr(self, 'last_price', p) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
@@ -733,6 +730,8 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_sl.setChecked(False) if o[ 'ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 10 and o['Ref'].decode() == 'auto_sl' else ...)
         self.checkBox_auto_sl.released.connect(lambda : self.init_auto_stoploss() if not self.checkBox_auto_sl.isChecked() else self.deinit_auto_stoploss())
         self.lineEdit_ProdCode.editingFinished.connect(lambda :self.init_auto_tp_sl())
+        self.pushButton_tp_pos_by_pos.released.connect(self.tp_pos_by_pos)
+        self.pushButton_sl_pos_by_pos.released.connect(self.sl_pos_by_pos)
 
 
     def init_auto_tp_sl(self):
@@ -810,8 +809,8 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         except Exception as e:
             print(e)
 
-    def update_holding_pos(self, pos_info):
-        pos = pos_info.get(self.lineEdit_ProdCode.text())
+    def update_holding_pos(self):
+        pos = self.parent().pos_info.get(self.lineEdit_ProdCode.text())
         if pos is not None:
             qty = pos['Qty'] if pos['LongShort'] == b'B' else -pos['Qty']
             amt = pos['TotalAmt'] if pos['LongShort'] == b'B' else -pos['TotalAmt']
@@ -820,11 +819,27 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             self.holding_pos_amt = amt + today_net_pos_amt
             self.holding_qty = qty + today_net_pos
             holding_price = self.holding_pos_amt / self.holding_qty if self.holding_qty != 0 else self.holding_pos_amt
+            print(holding_price)
             self.lineEdit_holding_qty.setText(str(self.holding_qty))
-            self.lineEdit_holding_price.setText(str(holding_price))
+            self.lineEdit_holding_price.setText(f'{holding_price:.2f}')
         else:
             self.lineEdit_holding_qty.setText('-')
             self.lineEdit_holding_price.setText('-')
+
+    def update_holding_pos_LIFO(self):
+        try:
+            holding_qty, holding_pos = self._get_holding_pos(self.parent().trades_info)
+        except Exception as e:
+            self.lineEdit_holding_qty.setText('-')
+            self.lineEdit_holding_price.setText('-')
+        else:
+            if holding_qty != 0:
+                holding_price = sum(holding_pos) / len(holding_pos)
+                self.lineEdit_holding_qty.setText(str(holding_qty))
+                self.lineEdit_holding_price.setText(f'{holding_price:.2f}')
+            else:
+                self.lineEdit_holding_qty.setText('-')
+                self.lineEdit_holding_price.setText('-')
 
     def update_trailing_stop(self, price):
         toler = self.spinBox_trailing_toler.value()
@@ -863,6 +878,123 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
                 self.lineEdit_sl_close_price.setText(str(self.trailing_close_price))
                 self.horizontalSlider_toler.setMaximum(int(self.trailing_best_price))
                 self.horizontalSlider_toler.setMinimum(int(self.trailing_close_price))
+
+    def _get_holding_pos(self, trades_info):
+        prodcode = self.lineEdit_ProdCode.text()
+        current_trades = [trade for trade in trades_info if trade['ProdCode'].decode('GBK') == prodcode]
+        if 'HSI' in prodcode:
+            leverage = 50
+        elif 'MHI' in prodcode:
+            leverage = 10
+        else:
+            leverage = 1
+
+        pos = get_pos_by_product(prodcode)
+
+        pre_pos = pos.Qty
+        pre_pos_price = pos.TotalAmt  / pre_pos if pre_pos !=0 else 0
+            # .sort(key=lambda x:x['IntOrderNo'])
+        self.trade_long_queue = []
+        self.trade_short_queue = []
+
+        if pos.LongShort == b'B':
+            self.trade_long_queue.extend([pre_pos_price] * pre_pos)
+        elif pos.LongShort == b'S':
+            self.trade_short_queue.extend([pre_pos_price] * pre_pos)
+
+        for t in current_trades:
+            current_trade = [t['AvgPrice']] * t['Qty']
+            if t['BuySell'].decode('GBK') == 'B':
+                self.trade_long_queue.extend(current_trade)
+            else:
+                self.trade_short_queue.extend(current_trade)
+
+
+        close_pos_takeprofit = reduce(add, [s-l for l, s in zip(self.trade_long_queue, self.trade_short_queue) ]) if len(self.trade_long_queue) != 0 and len(self.trade_short_queue) != 0 else 0
+        long_qty = len(self.trade_long_queue)
+        short_qty = len(self.trade_short_queue)
+        holding_qty = long_qty - short_qty
+
+        if holding_qty > 0:
+            holding_pos = self.trade_long_queue[:holding_qty]
+        elif holding_qty < 0:
+            holding_pos = self.trade_short_queue[:-holding_qty]
+        else:
+            holding_pos = []
+
+        return holding_qty, holding_pos
+
+    def sl_pos_by_pos(self):
+        try:
+            holding_qty, holding_pos = self._get_holding_pos(self.parent().trades_info)
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-获取持仓失败', str(e))
+            return
+
+        if self.lineEdit_ProdCode.text() != self.last_price.get('ProdCode', b'').decode():
+            QMessageBox.critical(self, 'CRITICAL-逐仓止损错误', '请检查合约代码')
+            return
+
+        if self.spinBox_lock_pos.value() >= holding_qty:
+            QMessageBox.warning(self, 'WARING-锁仓错误', f'目前持仓只有{holding_qty}')
+            return
+
+        if holding_qty > 0:
+            tp_close_qty = holding_qty - self.spinBox_lock_pos.value()
+            holding_pos.reverse()
+            tp_close_pos = holding_pos[:tp_close_qty]
+            for p in tp_close_pos:
+                add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='S', OrderOptions=0,
+                          Qty=1, ValidType=0, CondType=1, OrderType=0, Price=p - self.spinBox_sl_addition.value() - self.spinBox_stoploss_toler.value(),
+                          StopType='L', StopLevel=p - self.spinBox_stoploss_toler.value(),
+                          Ref='sl_pos_by_pos')
+        elif holding_qty < 0:
+            tp_close_qty = -holding_qty - self.spinBox_lock_pos.value()
+            tp_close_pos = holding_pos.reverse()[:tp_close_qty]
+            for p in tp_close_pos:
+                add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='B', OrderOptions=0,
+                          Qty=1, ValidType=0, CondType=1, OrderType=0, Price=p + self.spinBox_sl_addition.value() + self.spinBox_stoploss_toler.value(),
+                          StopType='L', StopLevel=p + self.spinBox_stoploss_toler.value(),
+                          Ref='sl_pos_by_pos')
+        else:
+            QMessageBox.warning(self, 'WARING-逐仓止损', '无持仓')
+
+    def tp_pos_by_pos(self):
+        try:
+            holding_qty, holding_pos = self._get_holding_pos(self.parent().trades_info)
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-获取持仓失败', str(e))
+            return
+
+        if self.lineEdit_ProdCode.text() != self.last_price.get('ProdCode', b'').decode():
+            QMessageBox.critical(self, 'CRITICAL-逐仓止盈错误', '请检查合约代码')
+            return
+
+        if self.spinBox_lock_pos.value() >= holding_qty:
+            QMessageBox.warning(self, 'WARING-锁仓错误', f'目前持仓只有{holding_qty}')
+            return
+
+        if holding_qty > 0:
+            tp_close_qty = holding_qty - self.spinBox_lock_pos.value()
+            holding_pos.reverse()
+            tp_close_pos = holding_pos[:tp_close_qty]
+            for p in tp_close_pos:
+                add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='S', OrderOptions=0,
+                          Qty=1, ValidType=0, CondType=0, OrderType=0, Price=p + self.spinBox_tp_addition.value(),
+                          Ref='tp_pos_by_pos')
+        elif holding_qty < 0:
+            tp_close_qty = -holding_qty - self.spinBox_lock_pos.value()
+            tp_close_pos = holding_pos.reverse()[:tp_close_qty]
+            for p in tp_close_pos:
+                add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='B', OrderOptions=0,
+                          Qty=1, ValidType=0, CondType=0, OrderType=0, Price=p - self.spinBox_tp_addition.value(),
+                          Ref='tp_pos_by_pos')
+        else:
+            QMessageBox.warning(self, 'WARING-逐仓止盈', '无持仓')
+
+
+
+
 
     def calc_amount_base(self, pos_info):
         prodcode = self.lineEdit_ProdCode.text()
