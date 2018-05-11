@@ -175,20 +175,77 @@ class QSubOrder(QThread):
                 Price = order['OpenPrice']
                 Qty = int(order['Lots'])
                 if order['Type'] == 0:
-                    add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}", OrderOptions=0, CondType=0, OrderType=6, Price=0)
+                    # add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}", OrderOptions=0, CondType=0, OrderType=6, Price=0)
+                    add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}",
+                              OrderOptions=0, CondType=0, OrderType=0, Price=Price - 250 if bs['B'] == 'B' else Price + 250)
                 elif order['Type'] == 1:
-                    add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}", OrderOptions=0, CondType=0, OrderType=6, Price=0)
+                    # add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}", OrderOptions=0, CondType=0, OrderType=6, Price=0)
+                    add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}",
+                              OrderOptions=0, CondType=0, OrderType=0, Price=Price + 250 if bs['S'] == 'S' else Price - 250)
             elif order['Status'] == 2 and order['Type'] < 6:
                 Price = order['OpenPrice']
                 Qty = int(order['Lots'])
                 if order['Type'] == 0:
-                    add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}", OrderOptions=0,
-                              CondType=0, OrderType=6, Price=0)
+                    # add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}", OrderOptions=0,
+                    #           CondType=0, OrderType=6, Price=0)
+                    add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}",
+                              OrderOptions=0,
+                              CondType=0, OrderType=0, Price=Price + 250 if bs['S'] == 'S' else Price - 250)
                 elif order['Type'] == 1:
-                    add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}", OrderOptions=0,
-                              CondType=0, OrderType=6, Price=0)
+                    # add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}", OrderOptions=0,
+                    #           CondType=0, OrderType=6, Price=0)
+                    add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}",
+                              OrderOptions=0,
+                              CondType=0, OrderType=0, Price=Price - 250 if bs['B'] == 'B' else Price + 250)
         except Exception as e:
             self.parent().info_sig.emit('WARING-跟单错误', str(e), 0)
+
+class QData(QObject):
+    def __init__(self, parent=None):
+        pos_update_sig = pyqtSignal(dict)
+        acc_update_sig = pyqtSignal(dict)
+        order_update_sig = pyqtSignal(dict)
+        trade_update_sig = pyqtSignal(dict)
+        ccy_update_sig = pyqtSignal(dict)
+        QObject.__init__(self, parent)
+        self.__pos_info = {}
+        self.__bal_info = {}
+        self.__acc_info = {}
+        self.__order_info = {}
+        self.__trade_info = {}
+        self.__ccy_info = {}
+
+    @property
+    def Pos(self):
+        return self.__pos_info
+
+    @property
+    def Bal(self):
+        return self.__bal_info
+
+    @property
+    def Acc(self):
+        return self.__acc_info
+
+    @property
+    def Order(self):
+        return self.__order_info
+
+    @property
+    def Trade(self):
+        return self.__trade_info
+
+    @property
+    def Ccy(self):
+        return self.__ccy_info
+
+    def init_signal(self):
+        self.pos_update_sig.connect(self.__pos_info.update)
+        self.acc_update_sig.connect(self.__acc_info.update)
+        self.order_update_sig.connect(self.__order_info.update)
+        self.trade_update_sig.connect(self.__trade_info.update)
+        self.ccy_update_sig.connect(self.__ccy_info.update)
+
 
 
 

@@ -265,7 +265,14 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.pos_info = {}
         self.order_info = {}
         self.PL = {}
+        self.sub_list = []
         self.init_signal()
+        self.info_update = [self.refresh_acc_info,
+                            self.refresh_orders,
+                            self.refresh_positions,
+                            self.refresh_trades,
+                            self.refresh_accbals,
+                            self.refresh_ccy_rate]
 
     def bind_account(self, account_id):
         self.Order.comboBox_account.addItem(account_id)
@@ -289,6 +296,19 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.pos_info_sig.connect(self.OrderAssistant.calc_amount_base)
         # self.OrderAssistant.pushButton_calc_tp_sl.released.connect(lambda :self.OrderAssistant.calc_amount_base(self.pos_info))
         self.OrderAssistant.oco_close_sig.connect(self.Order.oco_close)
+
+        self.pushButton_del_order.released.connect(self._del_current_selected_order)
+        self.pushButton_activate_order.released.connect(self._activate_selected_order)
+        self.pushButton_inactivate_order.released.connect(self._inactivate_selected_order)
+        self.pushButton_del_all_orders.released.connect(self._del_all_orders)
+        self.pushButton_activate_all_orders.released.connect(self._activate_all_orders)
+        self.pushButton_inactivate_all_orders.released.connect(self._inactivate_all_orders)
+        self.pushButton_close_order.released.connect(self._close_position)
+
+        self.QuickOrder.checkBox_Lock.toggled.connect(lambda b: self.QuickOrder.position_takeprofit_info_update(self.trades_info) if b else ...)
+
+        self.toolButton_update_info.released.connect(lambda: [subscribe_price(p, 1) for p in self.sub_list])
+        self.toolButton_update_info.released.connect(lambda: [func() for func in self.info_update])
 
     def update_pos_info(self, price_dict):
         for t in range(self.tableWidget_pos.rowCount()):
@@ -330,6 +350,340 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.tableWidget_acc_info.setItem(6, 0, QTableWidgetItem(ML))
         # self.tableWidget_acc_info.setItem(0, 0, f"{BuyingPower:,} {ccy}")
 
+    def __get_current_order_info(self):
+        row = self.tableWidget_orders.currentRow()
+        if row >= 0:
+            order_no = int(self.tableWidget_orders.item(self.tableWidget_orders.currentRow(), 0).text())
+            prodcode = self.tableWidget_orders.item(self.tableWidget_orders.currentRow(), 1).text()
+            return order_no, prodcode
+        else:
+            raise Exception('未选择订单')
+
+    def _del_current_selected_order(self):
+        try:
+            order_no, prodcode = self.__get_current_order_info()
+            delete_order_by(order_no, prodcode)
+        except Exception as e:
+            QMessageBox.warning(self, 'WARING-删除', str(e))
+
+    def _activate_selected_order(self):
+        try:
+            order_no, prodcode = self.__get_current_order_info()
+            activate_order_by(order_no)
+        except Exception as e:
+            QMessageBox.warning(self, 'WARING-生效', str(e))
+
+    def _inactivate_selected_order(self):
+        try:
+            order_no, prodcode = self.__get_current_order_info()
+            inactivate_order_by(order_no)
+        except Exception as e:
+            QMessageBox.warning(self, 'WARING-失效', str(e))
+
+    def _del_all_orders(self):
+        try:
+            delete_all_orders()
+        except Exception as e:
+            QMessageBox.warning(self, 'WARING-删除', str(e))
+
+    def _activate_all_orders(self):
+        try:
+            activate_all_orders()
+        except Exception as e:
+            QMessageBox.warning(self, 'WARING-生效', str(e))
+
+    def _inactivate_all_orders(self):
+        try:
+            activate_all_orders()
+        except Exception as e:
+            QMessageBox.warning(self, 'WARING-失效', str(e))
+
+
+    def __get_current_pos_info(self):
+        row = self.tableWidget_pos.currentRow()
+        if row >= 0:
+            prodcode = self.tableWidget_pos.item(self.tableWidget_pos.currentRow(), 0).text()
+            pos = get_pos_by_product(prodcode)
+            net_pos = (pos.Qty + pos.LongQty - pos.ShortQty) if pos.LongShort == b'B' else (
+                        -pos.Qty + pos.LongQty - pos.ShortQty)
+            return prodcode, net_pos
+        else:
+            raise Exception('请选择需要平仓仓位')
+
+    def _close_position(self):
+        try:
+            prodcode, net_pos = self.__get_current_pos_info()
+            if net_pos > 0:
+                ClosePositionDialog('S', prodcode, net_pos, self)
+            elif net_pos < 0:
+                ClosePositionDialog('B', prodcode, -net_pos, self)
+            else:
+                raise Exception('净仓为0')
+        except Exception as e:
+            QMessageBox.warning(self, 'WARING-平仓', str(e))
+
+    def refresh_acc_info(self):
+        try:
+            acc_info = get_acc_info()
+            self._refresh_acc_info(acc_info)
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-更新ACC', str(e))
+
+    def _refresh_acc_info(self, a):
+        acc_info_dict = {}
+        for name, c_type in a._fields_:
+            acc_info_dict[name] = getattr(a, name)
+
+        self.acc_info = acc_info_dict
+        base_ccy = acc_info_dict['BaseCcy'].decode()
+        ctrllevel_dict = {0: '正常', 1: '停止交易', 2: '暂停', 3: '冻结户口'}
+        try:
+            MarginLevel = (acc_info_dict['CashBal'] + acc_info_dict['CreditLimit'] + acc_info_dict['CommodityPL']) / \
+                          acc_info_dict['IMargin']
+            ML = f'{MarginLevel:.2%}'
+        except ZeroDivisionError:
+            ML = '-'
+        acc_info = [f"{acc_info_dict['BuyingPower']:,} {base_ccy}",
+                    f"{acc_info_dict['NAV']:,} {base_ccy}",
+                    f"{acc_info_dict['MarginCall']:,} {base_ccy}",
+                    f"{acc_info_dict['CommodityPL']:,} {base_ccy}",
+                    f"{acc_info_dict['IMargin']:,} {base_ccy}",
+                    f"{acc_info_dict['MMargin']:,} {base_ccy}",
+                    ML,
+                    f"{acc_info_dict['MaxMargin']:,} {base_ccy}",
+                    f"{ord(acc_info_dict['MarginPeriod'])}",
+                    f"{acc_info_dict['CashBal']:,} {base_ccy}",
+                    f"{acc_info_dict['CreditLimit']:,} {base_ccy}",
+                    f"{ctrllevel_dict[ord(acc_info_dict['CtrlLevel'])]}",
+                    acc_info_dict['MarginClass'].decode('GBK'),
+                    acc_info_dict['AEId'].decode('GBK')
+                    ]
+        for i, s in zip(range(14), map(str, acc_info)):
+            self.tableWidget_acc_info.setItem(i, 0, QTableWidgetItem(s))
+        self.tableWidget_acc_info.viewport().update()
+
+        return acc_info_dict
+
+    def refresh_orders(self):
+        try:
+            orders_array = get_orders_by_array()
+            orders = []
+            for i in range(self.tableWidget_orders.rowCount()):
+                self.tableWidget_orders.removeRow(0)
+
+            for o in orders_array:
+                orders.append(self._refresh_order(o))
+
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-更新ORDER', str(e))
+
+    def _refresh_order(self, o):
+        order_dict = {}
+        for name, c_type in o._fields_:
+            order_dict[name] = getattr(o, name)
+        self.order_info_sig.emit(order_dict)
+        r = 0
+
+        for i in range(self.tableWidget_orders.rowCount()):
+            if order_dict['IntOrderNo'] == int(self.tableWidget_orders.item(i, 0).text()):
+                r = i
+                break
+        else:
+            self.tableWidget_orders.insertRow(0)
+
+        order_info = [order_dict['IntOrderNo'],
+                      order_dict['ProdCode'].decode(),
+                      '',
+                      order_dict['Qty'] if order_dict['BuySell'].decode() == 'B' else '',
+                      order_dict['Qty'] if order_dict['BuySell'].decode() == 'S' else '',
+                      f"{order_dict['Price']:,}",
+                      dt.datetime.fromtimestamp(order_dict['ValidTime']),
+                      '',
+                      ORDER_STATUS[order_dict['Status']],
+                      order_dict['TradedQty'],
+                      order_dict['Initiator'].decode(),
+                      order_dict['Ref'].decode('GBK'),
+                      dt.datetime.fromtimestamp(order_dict['TimeStamp']),
+                      order_dict['ExtOrderNo']]
+
+        for i, s in zip(range(14), map(str, order_info)):
+            self.tableWidget_orders.setItem(r, i, QTableWidgetItem(s))
+        self.tableWidget_orders.viewport().update()
+        # AccInfo.tableWidget_orders.set_item_sig.emit(r, i, s)
+
+        if order_dict['Status'] in [10]:
+            self.tableWidget_orders.removeRow(r)
+
+        return order_dict
+
+    def refresh_positions(self):
+        try:
+            pos_array = get_all_pos_by_array()
+            pos = []
+            for i in range(self.tableWidget_pos.rowCount()):
+                self.tableWidget_pos.removeRow(0)
+            for p in pos_array:
+                pos.append(self._refresh_postion(p))
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-更新POS', str(e))
+
+    def _refresh_postion(self, p):
+        pos_dict = {}
+        for name, c_type in p._fields_:
+            pos_dict[name] = getattr(p, name)
+        prodcode = pos_dict['ProdCode'].decode()
+        if 'HSI' in prodcode:
+            leverage = 50
+        elif 'MHI' in prodcode:
+            leverage = 10
+        else:
+            leverage = 1
+        pos_dict.update(leverage=leverage)
+        self.pos_info[pos_dict['ProdCode'].decode('GBK')] = pos_dict
+        r = 0
+        for i in range(self.tableWidget_pos.rowCount()):
+            if pos_dict['ProdCode'].decode() == self.tableWidget_pos.item(i, 0).text():
+                r = i
+                break
+        else:
+            self.tableWidget_pos.insertRow(0)
+
+        qty = pos_dict['Qty'] if pos_dict['LongShort'] == b'B' else -pos_dict['Qty']
+        amt = pos_dict['TotalAmt'] if pos_dict['LongShort'] == b'B' else -pos_dict['TotalAmt']
+        today_net_pos = pos_dict['LongQty'] - pos_dict['ShortQty']
+        today_net_pos_amt = pos_dict['LongTotalAmt'] - pos_dict['ShortTotalAmt']
+        net_pos = qty + today_net_pos
+        net_pos_amt = amt + today_net_pos_amt
+
+        pos_info = [prodcode,
+                    '',
+                    f"{qty}@{(pos_dict['TotalAmt']/pos_dict['Qty']) if pos_dict['Qty'] != 0 else 0:.2f}",
+                    pos_dict['DepQty'],
+                    f"{pos_dict['LongQty']}@{(pos_dict['LongTotalAmt']/pos_dict['LongQty']) if pos_dict['LongQty'] != 0 else 0:.2f}",
+                    f"{-pos_dict['ShortQty']}@{(pos_dict['ShortTotalAmt']/pos_dict['ShortQty']) if pos_dict['ShortQty'] != 0 else 0:.2f}",
+                    f"{today_net_pos}@{today_net_pos_amt/(1 if today_net_pos==0 else today_net_pos):.2f}",
+                    f"{net_pos}@{net_pos_amt/(1 if net_pos==0 else net_pos):.2f}",
+                    '',
+                    f"{pos_dict['PL']:,}",
+                    '',
+                    f"{pos_dict['ExchangeRate']:,}",
+                    f"{pos_dict['PLBaseCcy']:,}",
+                    f"{pos_dict['leverage']}"]
+
+        for i, s in zip(range(14), map(str, pos_info)):
+            self.tableWidget_pos.setItem(r, i, QTableWidgetItem(s))
+        self.tableWidget_pos.viewport().update()
+
+        if prodcode not in self.sub_list:
+            self.sub_list.append(prodcode)
+
+        self.pos_info_sig.emit(self.pos_info)
+
+        return pos_dict
+
+    def refresh_trades(self):
+        try:
+            trades_array = get_all_trades_by_array()
+            trades = []
+            for i in range(self.tableWidget_trades.rowCount()):
+                self.tableWidget_trades.removeRow(0)
+
+            for t in trades_array:
+                trades.append(self._refresh_trade(t))
+
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-更新TRADE', str(e))
+
+    def _refresh_trade(self, t):
+        trade_dict = {}
+        for name, c_type in t._fields_:
+            trade_dict[name] = getattr(t, name)
+
+        self.update_trade_info(trade_dict)
+        if self.QuickOrder.checkBox_Lock.isChecked():
+            self.QuickOrder.position_takeprofit_info_update(self.trades_info)
+        r = 0
+        for i in range(self.tableWidget_trades.rowCount()):
+            if trade_dict['IntOrderNo'] == int(self.tableWidget_trades.item(i, 11).text()):
+                r = i
+                break
+        else:
+            self.tableWidget_trades.insertRow(0)
+
+        trade_info = [trade_dict['ProdCode'].decode(),
+                      '',
+                      trade_dict['Qty'] if trade_dict['BuySell'].decode() == 'B' else '',
+                      trade_dict['Qty'] if trade_dict['BuySell'].decode() == 'S' else '',
+                      f"{trade_dict['AvgPrice']:,}",
+                      trade_dict['TradeNo'],
+                      ORDER_STATUS[trade_dict['Status']],
+                      trade_dict['Initiator'].decode(),
+                      trade_dict['Ref'].decode(),
+                      dt.datetime.fromtimestamp(trade_dict['TradeTime']),
+                      f"{trade_dict['OrderPrice']:,}",
+                      trade_dict['IntOrderNo'],
+                      trade_dict['ExtOrderNo'],
+                      trade_dict['RecNO']]
+
+        for i, s in zip(range(14), map(str, trade_info)):
+            self.tableWidget_trades.setItem(r, i, QTableWidgetItem(s))
+        self.tableWidget_trades.viewport().update()
+
+        return trade_dict
+
+    def refresh_accbals(self):
+        try:
+            accbal_array = get_all_accbal_by_array()
+            accbal = []
+            for i in range(self.tableWidget_bal.rowCount()):
+                self.tableWidget_bal.removeRow(0)
+            for b in accbal_array:
+                accbal.append(self._refresh_accbals(b))
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-更新BAL', str(e))
+
+    def _refresh_accbals(self, b):
+        accbal_dict = {}
+        for name, c_type in b._fields_:
+            accbal_dict[name] = getattr(b, name)
+
+        r = 0
+        for i in range(self.tableWidget_bal.rowCount()):
+            if accbal_dict['Ccy'].decode() == self.tableWidget_bal.item(i, 0).text():
+                r = i
+                break
+        else:
+            self.tableWidget_bal.insertRow(0)
+        total_cash = accbal_dict['CashBF'] + accbal_dict['NotYetValue'] + accbal_dict['TodayCash']
+        ccy = get_ccy_rate_by_ccy(accbal_dict['Ccy'].decode()).value
+        bal_info = [accbal_dict['Ccy'].decode(),
+                    f"{accbal_dict['CashBF']:,}",
+                    f"{accbal_dict['NotYetValue']:,}",
+                    f"{accbal_dict['TodayCash']:,}",
+                    total_cash,
+                    f"{accbal_dict['Unpresented']:,}",
+                    ccy,
+                    f"{total_cash * ccy:,}"]
+
+        for i, s in zip(range(8), map(str, bal_info)):
+            self.tableWidget_bal.setItem(r, i, QTableWidgetItem(s))
+        self.tableWidget_bal.viewport().update()
+
+        return accbal_dict
+
+    def refresh_ccy_rate(self):
+        try:
+            ccy_list = ['CAD', 'CHF', 'EUR', 'GBP', 'HKD', 'JPY', 'KRW', 'MYR', 'SGD', 'USD']
+            ccy_dict = {ccy: get_ccy_rate_by_ccy(ccy).value for ccy in ccy_list}
+            for i in range(self.tableWidget_ccy_rate.rowCount()):
+                self.tableWidget_ccy_rate.removeRow(0)
+            for i, (ccy, rate) in enumerate(ccy_dict.items()):
+                self.tableWidget_ccy_rate.insertRow(i)
+                self.tableWidget_ccy_rate.setVerticalHeaderItem(i, QTableWidgetItem(ccy))
+                self.tableWidget_ccy_rate.setItem(i, 0, QTableWidgetItem(str(rate)))
+            self.tableWidget_ccy_rate.viewport().update()
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-更新CCY', str(e))
     #
     # def create_cond_text(self, **kwargs):
     #     _stoptype_text = {'L': '损>=' if kwargs['BuySell'] == 'B' else '损<=',
@@ -828,14 +1182,14 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
 
     def update_holding_pos_LIFO(self):
         try:
-            holding_qty, holding_pos = self._get_holding_pos(self.parent().trades_info)
+            self.holding_qty, holding_pos = self._get_holding_pos(self.parent().trades_info)
         except Exception as e:
             self.lineEdit_holding_qty.setText('-')
             self.lineEdit_holding_price.setText('-')
         else:
-            if holding_qty != 0:
+            if self.holding_qty != 0:
                 holding_price = sum(holding_pos) / len(holding_pos)
-                self.lineEdit_holding_qty.setText(str(holding_qty))
+                self.lineEdit_holding_qty.setText(str(self.holding_qty))
                 self.lineEdit_holding_price.setText(f'{holding_price:.2f}')
             else:
                 self.lineEdit_holding_qty.setText('-')
@@ -849,7 +1203,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         if self.holding_qty > 0:
             self.trailing_best_price = max(self.trailing_best_price, price['Last'][0]) if self.trailing_best_price != None else price['Last'][0]
             self.trailing_close_price = self.trailing_best_price - toler
-            print(self.trailing_best_price, self.trailing_close_price)
             if self.trailing_close_price >= price['Last'][0]:
                 self.close_position_trigger_sig.emit()
                 self.checkBox_trailing_stop.setChecked(False)
@@ -865,7 +1218,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         elif self.holding_qty < 0:
             self.trailing_best_price = min(self.trailing_best_price, price['Last'][0]) if self.trailing_best_price != None else price['Last'][0]
             self.trailing_close_price = self.trailing_best_price + toler
-            print(self.trailing_best_price, self.trailing_close_price)
             self.horizontalSlider_toler.setValue(int(price['Last'][0]))
             if self.trailing_close_price <= price['Last'][0]:
                 self.close_position_trigger_sig.emit()
@@ -876,8 +1228,8 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             else:
                 self.lineEdit_best_price.setText(str(self.trailing_best_price))
                 self.lineEdit_sl_close_price.setText(str(self.trailing_close_price))
-                self.horizontalSlider_toler.setMaximum(int(self.trailing_best_price))
-                self.horizontalSlider_toler.setMinimum(int(self.trailing_close_price))
+                self.horizontalSlider_toler.setMinimum(int(self.trailing_best_price))
+                self.horizontalSlider_toler.setMaximum(int(self.trailing_close_price))
 
     def _get_holding_pos(self, trades_info):
         prodcode = self.lineEdit_ProdCode.text()
@@ -1091,6 +1443,10 @@ class MainWindow(QtWidgets.QMainWindow):
             os.system(f'taskkill /F /PID {pid}')
         else:
             a0.ignore()
+
+    @on_business_date_reply  # 登录成功后会返回一个交易日期
+    def business_date_reply(business_date):
+        print('<日期>', f'当前交易日--{dt.datetime.fromtimestamp(business_date)}')
 
 class TimeWidget(QtWidgets.QWidget, Ui_Form_time):
     def __init__(self, parent=None):
