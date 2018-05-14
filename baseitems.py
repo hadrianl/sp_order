@@ -6,8 +6,9 @@
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 
 
-from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QMessageBox
+from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QMessageBox, QLabel, QWidget, QVBoxLayout
 from PyQt5.Qt import QObject, QIcon
+from PyQt5 import Qt
 from PyQt5.QtCore import pyqtSignal, QThread
 import pymysql as pm
 import datetime as dt
@@ -15,7 +16,8 @@ from queue import Queue, Empty
 import time
 from utils import MT4_ORDER_TYPE, FOLLOWER_STRATEGY
 from spapi.spAPI import add_order
-
+import itchat
+from PyQt5.QtGui import QPixmap
 
 class QInfoWidget(QTableWidget):
     set_item_sig = pyqtSignal([int, int, str], [int, int, QIcon])
@@ -168,6 +170,9 @@ class QSubOrder(QThread):
         if 'HSENG' not in order.get('Symbol','') or order['Account_ID'] not in self.follower_strategy:
         # if 'HSENG' not in order.get('Symbol', ''):
             return
+        diff = 200
+        order_options = 1
+
         try:
             bs = self.strategy_type[self.follower_strategy[order['Account_ID']]]
             # bs = {'B': 'B', 'S': 'S'}
@@ -177,11 +182,11 @@ class QSubOrder(QThread):
                 if order['Type'] == 0:
                     # add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}", OrderOptions=0, CondType=0, OrderType=6, Price=0)
                     add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}",
-                              OrderOptions=0, CondType=0, OrderType=0, Price=Price - 250 if bs['B'] == 'B' else Price + 250)
+                              OrderOptions=order_options, CondType=0, OrderType=0, Price=(Price - diff if bs['B'] == 'B' else Price + diff)//1)
                 elif order['Type'] == 1:
                     # add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}", OrderOptions=0, CondType=0, OrderType=6, Price=0)
                     add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}",
-                              OrderOptions=0, CondType=0, OrderType=0, Price=Price + 250 if bs['S'] == 'S' else Price - 250)
+                              OrderOptions=order_options, CondType=0, OrderType=0, Price=(Price + diff if bs['S'] == 'S' else Price - diff)//1)
             elif order['Status'] == 2 and order['Type'] < 6:
                 Price = order['OpenPrice']
                 Qty = int(order['Lots'])
@@ -189,16 +194,17 @@ class QSubOrder(QThread):
                     # add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}", OrderOptions=0,
                     #           CondType=0, OrderType=6, Price=0)
                     add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}",
-                              OrderOptions=0,
-                              CondType=0, OrderType=0, Price=Price + 250 if bs['S'] == 'S' else Price - 250)
+                              OrderOptions=order_options,
+                              CondType=0, OrderType=0, Price=(Price + diff if bs['S'] == 'S' else Price - diff)//1)
                 elif order['Type'] == 1:
                     # add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}", OrderOptions=0,
                     #           CondType=0, OrderType=6, Price=0)
                     add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}",
-                              OrderOptions=0,
-                              CondType=0, OrderType=0, Price=Price - 250 if bs['B'] == 'B' else Price + 250)
+                              OrderOptions=order_options,
+                              CondType=0, OrderType=0, Price=(Price - diff if bs['B'] == 'B' else Price + diff)//1)
         except Exception as e:
             self.parent().info_sig.emit('WARING-跟单错误', str(e), 0)
+            raise e
 
 class QData(QObject):
     def __init__(self, parent=None):
@@ -246,6 +252,59 @@ class QData(QObject):
         self.trade_update_sig.connect(self.__trade_info.update)
         self.ccy_update_sig.connect(self.__ccy_info.update)
 
+
+class QWechatInfo(QThread):
+    send_info_sig = pyqtSignal(str, str)
+    login_sig = pyqtSignal(bool)
+    qrcode_visible_sig = pyqtSignal(bool)
+    def __init__(self, parent=None):
+        QThread.__init__(self, parent)
+        self.init_qrcode()
+        # self.init_signal()
+
+    def init_qrcode(self):
+        self.QRcode = QWidget()
+        self.QRcode.setWindowTitle('QR Code')
+        self.QRcode.setMinimumHeight(300)
+        self.QRcode.setMinimumWidth(300)
+        self.QRcode.vlayout = QVBoxLayout()
+        self.QRcode.imageView = QLabel("QR Code")
+        # self.QRcode.imageView.setAlignment()
+        self.QRcode.vlayout.addWidget(self.QRcode.imageView)
+        self.QRcode.setLayout(self.QRcode.vlayout)
+        self.qrcode_visible_sig.connect(self.QRcode.setVisible)
+
+    # def init_signal(self):
+    #     self.send_info_sig.connect(self.send_msg)
+
+    def run(self):
+        itchat.auto_login(hotReload=True, loginCallback=self.loginCallback, exitCallback=self.exitCallback, qrCallback=self.qrCallback)
+        itchat.run()
+
+    def close(self):
+        itchat.logout()
+
+    def loginCallback(self):
+        self.login_sig.emit(True)
+        self.send_info_sig.connect(self.send_msg)
+        self.qrcode_visible_sig.emit(False)
+        itchat.send('开始接收SP信息', '')
+
+    def exitCallback(self):
+        self.login_sig.emit(False)
+        self.send_info_sig.disconnect(self.send_msg)
+
+    def qrCallback(self, uuid, status, qrcode):
+        print(uuid, status)
+        QrPixmap = QPixmap()
+        QrPixmap.loadFromData(qrcode)
+        self.QRcode.imageView.setPixmap(QrPixmap)
+        self.qrcode_visible_sig.emit(True)
+
+
+    def send_msg(self, msg, toUserName):
+        toUserName = toUserName if toUserName != '' else None
+        itchat.send(msg, toUserName)
 
 
 

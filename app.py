@@ -504,7 +504,6 @@ if __name__ == '__main__':
     update_thread.start()
 
 
-
     Login.pushButton_login.released.connect(win.init_api_sig)
     win.init_api_sig.connect(lambda :init_spapi())
     win.login_sig.connect(win.showMaximized)
@@ -526,10 +525,15 @@ if __name__ == '__main__':
     # AccInfo.toolButton_update_info.released.connect(lambda :[subscribe_price(p, 1) for p in sub_list])
 
     # AccInfo.pushButton_test.released.connect(win.init_order_follower)
-    # AccInfo.checkBox_follow_orders.toggled.connect(lambda b: win.init_order_follower() if b else win.deinit_order_follower())
+    AccInfo.checkBox_follow_orders.toggled.connect(lambda b: win.init_order_follower() if b else win.deinit_order_follower())
 
     win.login_sig.connect(lambda :[AccInfo.refresh_accbals(), AccInfo.refresh_ccy_rate()])
     win.login_sig.connect(lambda :win.timer.singleShot(5000, lambda :[subscribe_price(p, 1) for p in AccInfo.sub_list]))
+
+    AccInfo.pushButton_test.released.connect(lambda :win.wechat_info.send_info_sig.emit('tesing', ''))
+    # AccInfo.checkBox_wechat_info.toggled.connect(lambda b: win.init_wechat_info() if b else win.deinit_wechat_info())
+    AccInfo.checkBox_wechat_info.clicked.connect(lambda b:win.init_wechat_info() if b else win.deinit_wechat_info())
+    win.wechat_info.login_sig.connect(AccInfo.checkBox_wechat_info.setChecked)
 
 
     Login.lineEdit_password.setFocus()

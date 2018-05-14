@@ -15,7 +15,7 @@ from ui.sp_login import Ui_Dialog_sp_login
 from ui.quick_order_dialog import Ui_Dialog_quick_order
 from ui.order_comfirm_dialog import Ui_Dialog_order_comfirm
 from ui.close_position_dialog import Ui_Dialog_close_position
-from baseitems import QPriceUpdate, QPubOrder, QSubOrder
+from baseitems import QPriceUpdate, QPubOrder, QSubOrder, QWechatInfo
 from ui.order_assistant_widget import Ui_Form_OrderAssistant
 from ui.time_widget import Ui_Form_time
 from spapi.spAPI import *
@@ -502,7 +502,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
                       ORDER_STATUS[order_dict['Status']],
                       order_dict['TradedQty'],
                       order_dict['Initiator'].decode(),
-                      order_dict['Ref'].decode('GBK'),
+                      order_dict['Ref'].decode(),
                       dt.datetime.fromtimestamp(order_dict['TimeStamp']),
                       order_dict['ExtOrderNo']]
 
@@ -514,6 +514,14 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         if order_dict['Status'] in [10]:
             self.tableWidget_orders.removeRow(r)
 
+        if order_dict['Status'] not in [0, 4, 5, 6, 7]:
+            w_info = f"{order_info[12]}-跟随{order_info[11]}:\n" \
+                     f"代码:{order_info[1]}\n" \
+                     f"买卖:{order_dict['BuySell'].decode()}\n" \
+                     f"数量:{order_dict['Qty']}\n" \
+                     f"价格:{order_info[5]}\n" \
+                     f"状态:{order_info[8]}"
+            self.parent().wechat_info.send_info_sig.emit(w_info, '')
         return order_dict
 
     def refresh_positions(self):
@@ -1077,13 +1085,15 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         self.checkBox_trailing_stop.toggled.connect(lambda b: self.parent().qprice.price_update_sig.connect(self.update_trailing_stop) if b else self.parent().qprice.price_update_sig.disconnect(self.update_trailing_stop))
         self.parent().qprice.price_update_sig.connect(lambda p: self.lineEdit_price.setText(str(p['Last'][0])) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
         self.parent().qprice.price_update_sig.connect(lambda p: setattr(self, 'last_price', p) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
+
         self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_tp.setChecked(True) if o['ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 1 and o['Ref'].decode() =='auto_tp' else ...)
         self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_tp.setChecked(False) if o[ 'ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 10 and o['Ref'].decode() == 'auto_tp' else ...)
-        self.checkBox_auto_tp.released.connect(lambda : self.init_auto_takeprofit() if not self.checkBox_auto_tp.isChecked() else self.deinit_auto_takeprofit())
+        self.checkBox_auto_tp.clicked.connect(lambda b: self.init_auto_takeprofit() if b else self.deinit_auto_takeprofit())
         self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_sl.setChecked(True) if o['ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 1 and o['Ref'].decode() =='auto_sl' else ...)
         self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_sl.setChecked(False) if o[ 'ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 10 and o['Ref'].decode() == 'auto_sl' else ...)
-        self.checkBox_auto_sl.released.connect(lambda : self.init_auto_stoploss() if not self.checkBox_auto_sl.isChecked() else self.deinit_auto_stoploss())
+        self.checkBox_auto_sl.clicked.connect(lambda b: self.init_auto_stoploss() if b else self.deinit_auto_stoploss())
         self.lineEdit_ProdCode.editingFinished.connect(lambda :self.init_auto_tp_sl())
+
         self.pushButton_tp_pos_by_pos.released.connect(self.tp_pos_by_pos)
         self.pushButton_sl_pos_by_pos.released.connect(self.sl_pos_by_pos)
 
@@ -1097,6 +1107,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
                 if o.Status in [1, 3] and o.ProdCode.decode() == self.lineEdit_ProdCode.text():
                     if o.Ref.decode() == 'auto_tp':
                         self.checkBox_auto_tp.setChecked(True)
+                        break
                     elif o.Ref.decode() =='auto_sl':
                         self.checkBox_auto_sl.setChecked(True)
         except Exception as e:
@@ -1402,9 +1413,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, *args, **kwargs):
         QtWidgets.QMainWindow.__init__(self, parent, *args, **kwargs)
         self.timer = QtCore.QTimer(self)
+        self.wechat_info = QWechatInfo(self)
+        self.order_pub = QPubOrder(self)
+        self.order_sub = QSubOrder(self.order_pub.order_queue, self)
         self.init_signal()
-        # self.init_order_follower()
-        # self.setWindowTitle('Sharp Point Order System --- Carry Investment')
 
     def init_signal(self):
         self.info_sig.connect(self.popup)
@@ -1416,12 +1428,10 @@ class MainWindow(QtWidgets.QMainWindow):
         mb.setText(context)
         mb.show()
         if e_time != 0:
-            self.timer.singleShot(5000, mb.close)
+            self.timer.singleShot(e_time, mb.close)
 
 
     def init_order_follower(self):
-        self.order_pub = QPubOrder(self)
-        self.order_sub = QSubOrder(self.order_pub.order_queue, self)
         self.order_pub.finished.connect(lambda :self.popup('<INFO-跟单>', '交易发布已停止', 8000))
         self.order_sub.finished.connect(lambda: self.popup('<INFO-跟单>', '交易订阅已停止', 5000))
         self.order_pub.start()
@@ -1430,6 +1440,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def deinit_order_follower(self):
         self.order_pub.close()
         self.order_sub.close()
+
+    def init_wechat_info(self):
+        self.wechat_info.finished.connect(lambda: self.popup('INFO-微信推送', '关闭微信信息推送'))
+        self.wechat_info.start()
+
+    def deinit_wechat_info(self):
+        self.wechat_info.close()
 
     def closeEvent(self, a0: QtGui.QCloseEvent):
         reply = QtWidgets.QMessageBox.question(self, '退出', "是否要退出SP下单？",
