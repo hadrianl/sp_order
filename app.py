@@ -14,6 +14,7 @@ from spapi.conf.util import ORDER_STATUS
 import pickle
 from threading import Thread
 from queue import Queue
+from utils import get_order_cond
 
 
 
@@ -395,11 +396,13 @@ def order_request_failed(action, order, err_code, err_msg):
 
 @on_order_before_send_report  # 订单发送前调用
 def order_before_snd_report(order):
+    cond = get_order_cond(order)
     info = f"""
     代码:{order.ProdCode.decode()}\n
     方向:{dict(B='买入', S='沽出')[order.BuySell.decode()]}\n
     价格:{order.Price}\n
-    数量:{order.Qty}"""
+    数量:{order.Qty}\n
+    条件:{cond}"""
     info_handle('<订单>', f'即将发送请求--@{order.ProdCode.decode()}-Price:{order.Price}-Qty:{order.Qty}-BuySell:{order.BuySell.decode()}', 0, AccInfo.info_sig.emit, 'INFO-Order Before Send', info)
 
 @on_order_report  # 订单报告的回调推送

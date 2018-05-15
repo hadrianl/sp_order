@@ -4,7 +4,7 @@
 # @Author  : Hadrianl 
 # @File    : utils.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
-
+import datetime as dt
 
 MT4_ORDER_TYPE = {0: '买入',
                   1: '卖出',
@@ -17,3 +17,41 @@ MT4_ORDER_TYPE = {0: '买入',
 FOLLOWER_STRATEGY = {8946946:0,
                      8942813:0,
                      8946490:0}
+
+def get_order_cond(order_kwargs):
+    if not isinstance(order_kwargs, dict):
+        for name, c_type in order_kwargs._fields_:
+            order_kwargs[name] = getattr(order_kwargs, name)
+    _stoptype_text = {'L': '损>=' if order_kwargs['BuySell'] == 'B' else '损<=',
+                      'U': '升>=',
+                      'D': '跌<='}
+    cond = 0
+    if order_kwargs['CondType'] == 0:
+        if all(k in order_kwargs for k in ('UpLevel', 'UpPrice', 'DownLevel', 'DownPrice')):
+            if order_kwargs['BuySell'] == 'B':
+                _profit = order_kwargs['UpLevel'] - order_kwargs['Price']
+                _loss = order_kwargs['Price'] - order_kwargs['DownLevel']
+                _loss_toler = order_kwargs['DownLevel'] - order_kwargs['DownPrice']
+                cond = f"牛市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
+            elif order_kwargs['BuySell'] == 'S':
+                _profit = order_kwargs['Price'] - order_kwargs['DownLevel']
+                _loss = order_kwargs['UpLevel'] - order_kwargs['Price']
+                _loss_toler = order_kwargs['UpPrice'] - order_kwargs['UpLevel']
+                cond = f"熊市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
+    elif order_kwargs['CondType'] == 1:
+        cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}"
+    elif order_kwargs['CondType'] == 6:
+        if order_kwargs['BuySell'] == 'B':
+            cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}（追<={order_kwargs['UpLevel'] - order_kwargs['DownLevel']})"
+        elif order_kwargs['BuySell'] == 'S':
+            cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}（追>={order_kwargs['DownLevel'] + order_kwargs['UpLevel']})"
+    elif order_kwargs['CondType'] == 4:
+        if order_kwargs['BuySell'] == 'B':
+            cond = f"双向 损:{order_kwargs['UpPrice']}(>={order_kwargs['UpLevel']})"
+        elif order_kwargs['BuySell'] == 'S':
+            cond = f"双向 损:{order_kwargs['DownPrice']}(<={order_kwargs['DownLevel']})"
+    elif order_kwargs['CondType'] == 3:
+        _sched_time = dt.datetime.fromtimestamp(order_kwargs['SchedTime'])
+        cond = f">={_sched_time}"
+
+    return cond

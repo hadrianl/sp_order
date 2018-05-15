@@ -24,6 +24,7 @@ import os
 import pickle
 import datetime as dt
 import time
+from utils import get_order_cond
 from functools import reduce
 from operator import add
 # from sp_func.local import addOrder
@@ -131,7 +132,7 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                 order_kwargs['OrderType'] = {0: 0, 2: 6, 4: 2}[_order_type]
                 order_kwargs['Price'] = {0: self.spinBox_Price.value(), 2: 0, 4: 0x7fffffff}[_order_type]
                 order_kwargs['ValidType'] = self.comboBox_ValidType.currentIndex()
-                cond = ''
+                # cond = ''
                 if order_kwargs['ValidType'] == 4:
                     order_kwargs['ValidTime'] = int(dt.datetime.strptime(self.dateEdit_ValidTime.date().toPyDate().strftime('%Y/%m/%d'),
                                                          '%Y/%m/%d').timestamp())
@@ -139,7 +140,7 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                     order_kwargs['StopType'] = {0: 'L', 1: 'U', 2: 'D', 3: 'L'}[self.comboBox_StopType.currentIndex()]
                     order_kwargs['StopLevel'] = self.spinBox_StopLevel.value()
                     order_kwargs['CondType'] = 1
-                    cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}"
+                    # cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}"
 
                 else:
                     order_kwargs['StopLevel'] = 0
@@ -149,7 +150,7 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                 order_kwargs['Price'] = (self.spinBox_StopLevel2.value() + self.spinBox_toler.value()) if BuySell == 'B' \
                     else (self.spinBox_StopLevel2.value() - self.spinBox_toler.value())
                 order_kwargs['StopLevel'] = self.spinBox_StopLevel2.value()
-                cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}"
+                # cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}"
                 if self.checkBox_Trailing_Stop.isChecked():
                     order_kwargs['CondType'] = 6
 
@@ -157,23 +158,23 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                         order_kwargs['UpLevel'] = current_price.Ask[0]
                         order_kwargs['UpPrice'] = order_kwargs['StopLevel']
                         order_kwargs['DownLevel'] = self.spinBox_trailing_stop_step.value()
-                        cond = cond + f"（追<={order_kwargs['UpLevel'] - order_kwargs['DownLevel']})"
+                        # cond = cond + f"（追<={order_kwargs['UpLevel'] - order_kwargs['DownLevel']})"
                     else:
                         order_kwargs['DownLevel'] = current_price.Bid[0]
                         order_kwargs['DownPrice'] = order_kwargs['StopLevel']
                         order_kwargs['UpLevel'] = self.spinBox_trailing_stop_step.value()
-                        cond = cond + f"（追>={order_kwargs['DownLevel'] + order_kwargs['UpLevel']})"
+                        # cond = cond + f"（追>={order_kwargs['DownLevel'] + order_kwargs['UpLevel']})"
             elif _condtype_index == 2:
                 order_kwargs['ValidType'] = 0
                 order_kwargs['Price'] = self.spinBox_Price.value()
                 if BuySell == 'B':
                     order_kwargs['UpLevel'] = self.spinBox_oco_StopLevel.value()
                     order_kwargs['UpPrice'] = self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()
-                    cond = f"双向 损:{order_kwargs['UpPrice']}(>={order_kwargs['UpLevel']})"
+                    # cond = f"双向 损:{order_kwargs['UpPrice']}(>={order_kwargs['UpLevel']})"
                 else:
                     order_kwargs['DownLevel'] = self.spinBox_oco_StopLevel.value()
                     order_kwargs['DownPrice'] = self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()
-                    cond = f"双向 损:{order_kwargs['DownPrice']}(<={order_kwargs['DownLevel']})"
+                    # cond = f"双向 损:{order_kwargs['DownPrice']}(<={order_kwargs['DownLevel']})"
 
             elif _condtype_index == 3:
                 order_kwargs['ValidType'] = 0
@@ -186,20 +187,21 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                     order_kwargs['UpPrice'] = Price + _profit
                     order_kwargs['DownLevel'] = Price - _loss
                     order_kwargs['DownPrice'] = Price - _loss - _loss_toler
-                    cond = f"牛市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
+                    # cond = f"牛市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
                 else:
                     order_kwargs['DownLevel'] = Price - _profit
                     order_kwargs['DownPrice'] = Price - _profit
                     order_kwargs['UpLevel'] = Price + _loss
                     order_kwargs['UpPrice'] = Price + _loss + _loss_toler
-                    cond = f"熊市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
+                    # cond = f"熊市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
 
             elif _condtype_index == 4:
                 order_kwargs['ValidType'] = 0
                 order_kwargs['Price'] = self.spinBox_Price.value()
                 _sched_time = self.dateTimeEdit_sched_time.dateTime().toPyDateTime()
                 order_kwargs['SchedTime'] = int(_sched_time.timestamp())
-                cond = f">={_sched_time}"
+                # cond = f">={_sched_time}"
+            cond = get_order_cond(order_kwargs)
         except Exception as e:
             print(e)
             # raise e
@@ -515,13 +517,14 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             self.tableWidget_orders.removeRow(r)
 
         if order_dict['Status'] not in [0, 4, 5, 6, 7]:
-            w_info = f"{order_info[12]}-跟随{order_info[11]}:\n" \
+            w_info = f"    {order_info[12]}\n" \
+                     f"    跟随{order_info[11]}\n" \
                      f"代码:{order_info[1]}\n" \
                      f"买卖:{order_dict['BuySell'].decode()}\n" \
                      f"数量:{order_dict['Qty']}\n" \
                      f"价格:{order_info[5]}\n" \
                      f"状态:{order_info[8]}"
-            self.parent().wechat_info.send_info_sig.emit(w_info, '')
+            self.parent().wechat_info.send_info_sig.emit(w_info)
         return order_dict
 
     def refresh_positions(self):
@@ -840,7 +843,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             order_kwargs['ValidType'] = self.comboBox_VaildType.currentIndex()
             order_kwargs['CondType'] = 0
             order_kwargs['Price'] = Price
-            cond = ''
+            cond = get_order_cond(order_kwargs)
         except Exception as e:
             raise e
         else:

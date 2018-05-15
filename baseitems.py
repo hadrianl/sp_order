@@ -193,13 +193,13 @@ class QSubOrder(QThread):
                 if order['Type'] == 0:
                     # add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}", OrderOptions=0,
                     #           CondType=0, OrderType=6, Price=0)
-                    add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}",
+                    add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"CL-#{order['Ticket']}",
                               OrderOptions=order_options,
                               CondType=0, OrderType=0, Price=(Price + diff if bs['S'] == 'S' else Price - diff)//1)
                 elif order['Type'] == 1:
                     # add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}", OrderOptions=0,
                     #           CondType=0, OrderType=6, Price=0)
-                    add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OS-#{order['Ticket']}",
+                    add_order(BuySell=bs['B'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"CS-#{order['Ticket']}",
                               OrderOptions=order_options,
                               CondType=0, OrderType=0, Price=(Price - diff if bs['B'] == 'B' else Price + diff)//1)
         except Exception as e:
@@ -253,12 +253,15 @@ class QData(QObject):
         self.ccy_update_sig.connect(self.__ccy_info.update)
 
 
+
+
 class QWechatInfo(QThread):
-    send_info_sig = pyqtSignal(str, str)
+    send_info_sig = pyqtSignal(str)
     login_sig = pyqtSignal(bool)
     qrcode_visible_sig = pyqtSignal(bool)
     def __init__(self, parent=None):
         QThread.__init__(self, parent)
+        self.log_receiver = ''
         self.init_qrcode()
         # self.init_signal()
 
@@ -269,7 +272,7 @@ class QWechatInfo(QThread):
         self.QRcode.setMinimumWidth(300)
         self.QRcode.vlayout = QVBoxLayout()
         self.QRcode.imageView = QLabel("QR Code")
-        # self.QRcode.imageView.setAlignment()
+        self.QRcode.imageView.setAlignment(Qt.Qt.AlignCenter)
         self.QRcode.vlayout.addWidget(self.QRcode.imageView)
         self.QRcode.setLayout(self.QRcode.vlayout)
         self.qrcode_visible_sig.connect(self.QRcode.setVisible)
@@ -279,6 +282,7 @@ class QWechatInfo(QThread):
 
     def run(self):
         itchat.auto_login(hotReload=True, loginCallback=self.loginCallback, exitCallback=self.exitCallback, qrCallback=self.qrCallback)
+
         itchat.run()
 
     def close(self):
@@ -288,10 +292,15 @@ class QWechatInfo(QThread):
         self.login_sig.emit(True)
         self.send_info_sig.connect(self.send_msg)
         self.qrcode_visible_sig.emit(False)
-        itchat.send('开始接收SP信息', '')
+        try:
+            self.log_receiver = itchat.search_chatrooms(name='SP LOG')[0]['UserName']
+        except Exception as e:
+            self.log_receiver = ''
+        itchat.send('开始接收SP信息', self.log_receiver)
 
     def exitCallback(self):
         self.login_sig.emit(False)
+        itchat.send('暂停接收SP信息', self.log_receiver)
         self.send_info_sig.disconnect(self.send_msg)
 
     def qrCallback(self, uuid, status, qrcode):
@@ -302,9 +311,8 @@ class QWechatInfo(QThread):
         self.qrcode_visible_sig.emit(True)
 
 
-    def send_msg(self, msg, toUserName):
-        toUserName = toUserName if toUserName != '' else None
-        itchat.send(msg, toUserName)
+    def send_msg(self, msg):
+        itchat.send(msg, self.log_receiver)
 
 
 
