@@ -18,16 +18,22 @@ FOLLOWER_STRATEGY = {8946946:0,
                      8942813:0,
                      8946490:0}
 
-def get_order_cond(order_kwargs):
-    if not isinstance(order_kwargs, dict):
-        for name, c_type in order_kwargs._fields_:
-            order_kwargs[name] = getattr(order_kwargs, name)
+def get_order_cond(order):
+    order_kwargs = {}
+    if not isinstance(order, dict):
+        for name, c_type in order._fields_:
+            v = getattr(order, name)
+            v = v.decode('big5') if isinstance(v, bytes) else v
+            order_kwargs[name] = v
+    else:
+        order_kwargs = order
+
     _stoptype_text = {'L': '损>=' if order_kwargs['BuySell'] == 'B' else '损<=',
                       'U': '升>=',
                       'D': '跌<='}
-    cond = 0
+    cond = ''
     if order_kwargs['CondType'] == 0:
-        if all(k in order_kwargs for k in ('UpLevel', 'UpPrice', 'DownLevel', 'DownPrice')):
+        if all(k in order_kwargs for k in ('UpLevel', 'UpPrice', 'DownLevel', 'DownPrice')) and any(order_kwargs.get(k, 0)!=0 for k in ('UpLevel', 'UpPrice', 'DownLevel', 'DownPrice')):
             if order_kwargs['BuySell'] == 'B':
                 _profit = order_kwargs['UpLevel'] - order_kwargs['Price']
                 _loss = order_kwargs['Price'] - order_kwargs['DownLevel']

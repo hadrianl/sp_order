@@ -18,6 +18,7 @@ from utils import MT4_ORDER_TYPE, FOLLOWER_STRATEGY
 from spapi.spAPI import add_order
 import itchat
 from PyQt5.QtGui import QPixmap
+import re
 
 class QInfoWidget(QTableWidget):
     set_item_sig = pyqtSignal([int, int, str], [int, int, QIcon])
@@ -190,6 +191,10 @@ class QSubOrder(QThread):
             elif order['Status'] == 2 and order['Type'] < 6:
                 Price = order['OpenPrice']
                 Qty = int(order['Lots'])
+                if not self.check_holding_or_not(order['Ticket']):
+                    self.parent().info_sig.emit('INFO-跟单忽略', f"#{order['Ticket']}平仓信号未找到对应跟单成交,忽略该信号", 3000)
+                    print(f"#{order['Ticket']}平仓信号未找到对应跟单成交,忽略该信号")
+                    return
                 if order['Type'] == 0:
                     # add_order(BuySell=bs['S'], ProdCode=self.ProdCode, Qty=Qty, Ref=f"OL-#{order['Ticket']}", OrderOptions=0,
                     #           CondType=0, OrderType=6, Price=0)
@@ -206,13 +211,27 @@ class QSubOrder(QThread):
             self.parent().info_sig.emit('WARING-跟单错误', str(e), 0)
             raise e
 
+    def check_holding_or_not(self, order_ticket):
+        trade_info = self.parent().data.Trade
+        print(trade_info)
+        pattern = re.compile(r'O[LS]-#(\d+)')
+        for _, o in trade_info.items():
+            ref = o['Ref'].decode()
+            ticket = pattern.findall(ref)
+            if ticket and ticket[0] == str(order_ticket):
+                return True
+        else:
+            return False
+
+
+
 class QData(QObject):
+    pos_update_sig = pyqtSignal(dict)
+    acc_update_sig = pyqtSignal(dict)
+    order_update_sig = pyqtSignal(dict)
+    trade_update_sig = pyqtSignal(dict)
+    ccy_update_sig = pyqtSignal(dict)
     def __init__(self, parent=None):
-        pos_update_sig = pyqtSignal(dict)
-        acc_update_sig = pyqtSignal(dict)
-        order_update_sig = pyqtSignal(dict)
-        trade_update_sig = pyqtSignal(dict)
-        ccy_update_sig = pyqtSignal(dict)
         QObject.__init__(self, parent)
         self.__pos_info = {}
         self.__bal_info = {}
@@ -220,6 +239,9 @@ class QData(QObject):
         self.__order_info = {}
         self.__trade_info = {}
         self.__ccy_info = {}
+        self.__sub_list = []
+        self.__product_info = {}
+        self.init_signal()
 
     @property
     def Pos(self):
@@ -245,15 +267,69 @@ class QData(QObject):
     def Ccy(self):
         return self.__ccy_info
 
+    @property
+    def sub_list(self):
+        return self.__sub_list
+
+    @property
+    def Product(self):
+        return self.__product_info
+
     def init_signal(self):
         self.pos_update_sig.connect(self.__pos_info.update)
         self.acc_update_sig.connect(self.__acc_info.update)
         self.order_update_sig.connect(self.__order_info.update)
         self.trade_update_sig.connect(self.__trade_info.update)
         self.ccy_update_sig.connect(self.__ccy_info.update)
+        self.parent().qprice.price_update_sig.connect(self._update_product)
 
+    def _update_pos(self, p):
+        pos_dict = {}
+        for name, c_type in p._fields_:
+            pos_dict[name] = getattr(p, name)
+        prodcode = pos_dict['ProdCode'].decode()
+        if 'HSI' in prodcode:
+            leverage = 50
+        elif 'MHI' in prodcode:
+            leverage = 10
+        else:
+            leverage = 1
+        pos_dict.update(leverage=leverage)
+        self.Pos.update({pos_dict['ProdCode'].decode('GBK'):pos_dict})
 
+    def _update_acc(self, a):
+        acc_info_dict = {}
+        for name, c_type in a._fields_:
+            acc_info_dict[name] = getattr(a, name)
+        self.Acc.update(acc_info_dict)
 
+    def _update_order(self, o):
+        order_dict = {}
+        for name, c_type in o._fields_:
+            order_dict[name] = getattr(o, name)
+        # self.order_info_sig.emit(order_dict)
+        self.Order.update({order_dict['IntOrderNo']: order_dict})
+
+    def _update_trade(self, t):
+        trade_dict = {}
+        for name, c_type in t._fields_:
+            trade_dict[name] = getattr(t, name)
+
+        self.Trade.update({trade_dict['IntOrderNo']: trade_dict})
+
+    def _update_bal(self, b):
+        accbal_dict = {}
+        for name, c_type in b._fields_:
+            accbal_dict[name] = getattr(b, name)
+        self.Bal.update({accbal_dict['Ccy'].decode(): accbal_dict})
+
+    def _update_ccy(self, c):
+        self.Ccy.update(c)
+
+    def _update_product(self, p):
+        prodcode = p['ProdCode'].decode('big5')
+        prodname = p['ProdName'].decode('big5')
+        self.Product.update({prodcode: prodname})
 
 class QWechatInfo(QThread):
     send_info_sig = pyqtSignal(str)

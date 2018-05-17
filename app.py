@@ -399,7 +399,7 @@ def order_before_snd_report(order):
     cond = get_order_cond(order)
     info = f"""
     代码:{order.ProdCode.decode()}\n
-    方向:{dict(B='买入', S='沽出')[order.BuySell.decode()]}\n
+    方向:{dict(B='买入', S='沽出').get(order.BuySell.decode(), '')}\n
     价格:{order.Price}\n
     数量:{order.Qty}\n
     条件:{cond}"""
@@ -531,9 +531,10 @@ if __name__ == '__main__':
     AccInfo.checkBox_follow_orders.toggled.connect(lambda b: win.init_order_follower() if b else win.deinit_order_follower())
 
     win.login_sig.connect(lambda :[AccInfo.refresh_accbals(), AccInfo.refresh_ccy_rate()])
-    win.login_sig.connect(lambda :win.timer.singleShot(5000, lambda :[subscribe_price(p, 1) for p in AccInfo.sub_list]))
+    win.login_sig.connect(lambda :win.timer.singleShot(3000, lambda :[subscribe_price(p, 1) for p in AccInfo.data.sub_list]))
+    # win.login_sig.connect(lambda :[subscribe_price(p, 1) for p in AccInfo.data.sub_list])
 
-    AccInfo.pushButton_test.released.connect(lambda :win.wechat_info.send_info_sig.emit('tesing', ''))
+    AccInfo.pushButton_test.released.connect(win.init_sql_table)
     # AccInfo.checkBox_wechat_info.toggled.connect(lambda b: win.init_wechat_info() if b else win.deinit_wechat_info())
     AccInfo.checkBox_wechat_info.clicked.connect(lambda b:win.init_wechat_info() if b else win.deinit_wechat_info())
     win.wechat_info.login_sig.connect(AccInfo.checkBox_wechat_info.setChecked)
