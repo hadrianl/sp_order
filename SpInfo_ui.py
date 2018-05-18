@@ -1501,7 +1501,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def init_order_follower(self):
         self.order_pub.finished.connect(lambda :self.popup('<INFO-跟单>', '交易发布已停止', 8000))
-        self.order_sub.finished.connect(lambda: self.popup('<INFO-跟单>', '交易订阅已停止', 5000))
+        self.order_sub.finished.connect(lambda : self.popup('<INFO-跟单>', '交易订阅已停止', 5000))
+        self.order_pub.started.connect(lambda : self.popup('<INFO-跟单>', '开始发布交易', 8000))
+        self.order_sub.started.connect(lambda : self.popup('<INFO-跟单>', '开始订阅交易', 5000))
+        self.order_sub.started.connect(lambda : self.wechat_info.send_info_sig.emit('开始跟单'))
+        self.order_sub.finished.connect(lambda :self.wechat_info.send_info_sig.emit('停止跟单'))
         self.order_pub.start()
         self.order_sub.start()
 

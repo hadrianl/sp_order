@@ -503,6 +503,7 @@ if __name__ == '__main__':
     win.setWindowTitle('Sharp Point Order System --- Carry Investment')
     Login = SpLoginDialog(win)
     AccInfo = AccInfoWidget(win)
+    win.AccInfo = AccInfo
     update_thread = Thread(target=info_handler)
     update_thread.start()
 

@@ -17,6 +17,7 @@ import time
 from utils import MT4_ORDER_TYPE, FOLLOWER_STRATEGY
 from spapi.spAPI import add_order
 import itchat
+from itchat.content import *
 from PyQt5.QtGui import QPixmap
 import re
 
@@ -63,7 +64,6 @@ class QPubOrder(QThread):
         print(self.last_time)
 
     def run(self):
-        self.parent().info_sig.emit('INFO-跟单', '开始发布交易', 8000)
         orders_dict = {}
         while self._active:
             with self.conn.cursor() as cursor:
@@ -137,7 +137,6 @@ class QSubOrder(QThread):
         except KeyError:...
 
     def run(self):
-        self.parent().info_sig.emit('INFO-跟单', '开始订阅交易', 5000)
         while self._active:
             try:
                 new_order = self.order_queue.get(timeout=3)
@@ -212,13 +211,26 @@ class QSubOrder(QThread):
             raise e
 
     def check_holding_or_not(self, order_ticket):
-        trade_info = self.parent().data.Trade
+        trade_info = self.parent().AccInfo.data.Trade
         print(trade_info)
         pattern = re.compile(r'O[LS]-#(\d+)')
+        O = []
+        pattern2 = re.compile(r'C[LS]-#(\d+)')
+        C = []
         for _, o in trade_info.items():
             ref = o['Ref'].decode()
-            ticket = pattern.findall(ref)
-            if ticket and ticket[0] == str(order_ticket):
+            O_ticket = pattern.findall(ref)
+            C_ticket = pattern2.findall(ref)
+
+            if O_ticket and O_ticket[0] == str(order_ticket):
+                O.extend(O_ticket)
+            if C_ticket and C_ticket[0] == str(order_ticket):
+                C.extend(C_ticket)
+
+        for t in O:
+            if t in C:
+                return False
+            else:
                 return True
         else:
             return False
@@ -358,10 +370,11 @@ class QWechatInfo(QThread):
 
     def run(self):
         itchat.auto_login(hotReload=True, loginCallback=self.loginCallback, exitCallback=self.exitCallback, qrCallback=self.qrCallback)
-
+        self.init_reply()
         itchat.run()
 
     def close(self):
+        itchat.send('暂停接收SP信息', self.log_receiver)
         itchat.logout()
 
     def loginCallback(self):
@@ -376,7 +389,6 @@ class QWechatInfo(QThread):
 
     def exitCallback(self):
         self.login_sig.emit(False)
-        itchat.send('暂停接收SP信息', self.log_receiver)
         self.send_info_sig.disconnect(self.send_msg)
 
     def qrCallback(self, uuid, status, qrcode):
@@ -386,9 +398,26 @@ class QWechatInfo(QThread):
         self.QRcode.imageView.setPixmap(QrPixmap)
         self.qrcode_visible_sig.emit(True)
 
-
     def send_msg(self, msg):
         itchat.send(msg, self.log_receiver)
+
+    def init_reply(self):
+        @itchat.msg_register(TEXT,isGroupChat=True)
+        def reply(msg):
+            if msg['isAt']:
+                data = self.parent().AccInfo.data
+                print(msg)
+                reply_map = {'订单': data.Order,
+                             '持仓': data.Pos,
+                             '成交': data.Trade,
+                             '结余': data.Bal,
+                             '账户': data.Acc,
+                             '帮助': '<订单>\n<持仓>\n<成交>\n<结余>\n<账户>'}
+                info = [reply_map[k] for k in reply_map if k in msg['Text']]
+
+                for i in info:
+                    itchat.send(f'{i}', self.log_receiver)
+
 
 
 
