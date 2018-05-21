@@ -7,7 +7,6 @@
 
 from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QColor, QFont, QMessageBox,pyqtSignal, QTableWidgetItem, QHeaderView, QModelIndex, QBrush
 from PyQt5 import QtWidgets, QtCore, QtGui, Qt, QtSql
-import datetime as dt
 from ui.order_dialog import Ui_Dialog_order
 from ui.acc_info import Ui_Form_acc_info
 from ui.sp_login import Ui_Dialog_sp_login
@@ -27,7 +26,8 @@ from utils import get_order_cond
 from baseitems import QData
 from functools import reduce
 from operator import add
-# from sp_func.local import addOrder
+from queue import Queue
+from threading import Thread
 
 class QSqlTable(QtWidgets.QTableView):
     class QDataModel(QtSql.QSqlTableModel):
@@ -100,8 +100,6 @@ class OrderDialog(QDialog, Ui_Dialog_order):
         self._oco_sl_flag = True
         # desktop = QDesktopWidget()
         # self.move(desktop.width() - self.width(),(desktop.height() - self.height())/2 - 70)
-        # self.spinBox_Price.set
-
 
     def init_signal(self):
         self.comboBox_CondType.activated.connect(lambda n: (self.spinBox_Price.setDisabled(n in [1]),
@@ -121,7 +119,6 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                                                             setattr(self, '_sl2_flag', True),
                                                             setattr(self, '_oco_sl_flag', True)
                                                             ))
-
         self.comboBox_ValidType.currentIndexChanged.connect(lambda n: (
                                                              self.checkBox_stop_tri.setCheckState(0) if n in [1, 2] else ...,
                                                              self.checkBox_Auction.setEnabled(n in [0]),
@@ -133,24 +130,19 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                                                              ))
         self.checkBox_stop_tri.toggled.connect(lambda x: (self.comboBox_StopType.setCurrentIndex(0) if not x else ...,
                                                           self.spinBox_StopLevel.setValue(0) if not x else ...))
-
         self.checkBox_Market.toggled.connect(lambda x: (self.spinBox_Price.setValue(0) if x else ...,
                                                         ))
         self.checkBox_Auction.toggled.connect(lambda x: (self.spinBox_Price.setValue(0x7fffffff) if x else self.spinBox_Price.setValue(0),
                                                          ))
-
         self.comboBox_StopType.activated.connect(lambda n: self.checkBox_Market.setChecked(n in [3]))
-
         self.spinBox_StopLevel2.valueChanged.connect(lambda x: self.spinBox_Price.setValue(x + self.spinBox_toler.value()if self.radioButton_buy1.isChecked() else x - self.spinBox_toler.value())if not self.checkBox_Market.checkState() else 0)
         self.spinBox_toler.valueChanged.connect(lambda x: self.spinBox_Price.setValue((x + self.spinBox_StopLevel2.value() if self.radioButton_buy1.isChecked() else self.spinBox_StopLevel2.value() - x) if not self.checkBox_Market.checkState() else 0))
         self.radioButton_buy1.toggled.connect(lambda x: self.spinBox_Price.setValue(self.spinBox_StopLevel2.value() + self.spinBox_toler.value()))
         self.radioButton_sell1.toggled.connect(lambda x: self.spinBox_Price.setValue(self.spinBox_StopLevel2.value() - self.spinBox_toler.value()))
-
         self.spinBox_oco_StopLevel.valueChanged.connect(lambda x: self.label_oco_pirce.setText(f'{x + self.spinBox_oco_toler.value() if self.radioButton_buy2.isChecked() else x - self.spinBox_oco_toler.value()}'))
         self.spinBox_oco_toler.valueChanged.connect(lambda x: self.label_oco_pirce.setText(f'{x + self.spinBox_oco_StopLevel.value() if self.radioButton_buy2.isChecked() else self.spinBox_oco_StopLevel.value() - x}'))
         self.radioButton_buy2.toggled.connect(lambda x: self.label_oco_pirce.setText(f'{self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()}'))
         self.radioButton_sell1.toggled.connect(lambda x: self.label_oco_pirce.setText(f'{self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()}'))
-
         self.spinBox_Price.valueChanged.connect(lambda x: (self.spinBox_Price.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_price_flag', False)) if self._price_flag else ...)
         self.spinBox_StopLevel.valueChanged.connect(lambda x: (self.spinBox_StopLevel.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_sl_flag', False)) if self._sl_flag else ...)
         self.spinBox_StopLevel2.valueChanged.connect(lambda x: (self.spinBox_StopLevel2.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_sl2_flag', False)) if self._sl2_flag else ...)
@@ -158,7 +150,6 @@ class OrderDialog(QDialog, Ui_Dialog_order):
         self.pushButton_buy.released.connect(lambda :self.order('B'))
         self.pushButton_sell.released.connect(lambda :self.order('S'))
         # self.checkBox_lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
-
 
     def order(self, BuySell):
         try:
@@ -171,15 +162,12 @@ class OrderDialog(QDialog, Ui_Dialog_order):
             order_kwargs['OrderOptions'] = 1 if self.checkBox_OrderOptions.checkState() else 0
             _condtype_index = self.comboBox_CondType.currentIndex()
             order_kwargs['CondType'] = {0: 0, 1: 1, 2: 4,3: 0, 4: 3}[_condtype_index]
-            _stoptype_text = {'L': '损>=' if order_kwargs['BuySell'] == 'B' else '损<=',
-                              'U': '升>=',
-                              'D': '跌<='}
             if _condtype_index == 0:
                 _order_type = (self.checkBox_Auction.checkState() << 1) + self.checkBox_Market.checkState()
                 order_kwargs['OrderType'] = {0: 0, 2: 6, 4: 2}[_order_type]
                 order_kwargs['Price'] = {0: self.spinBox_Price.value(), 2: 0, 4: 0x7fffffff}[_order_type]
                 order_kwargs['ValidType'] = self.comboBox_ValidType.currentIndex()
-                # cond = ''
+
                 if order_kwargs['ValidType'] == 4:
                     order_kwargs['ValidTime'] = int(dt.datetime.strptime(self.dateEdit_ValidTime.date().toPyDate().strftime('%Y/%m/%d'),
                                                          '%Y/%m/%d').timestamp())
@@ -187,17 +175,15 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                     order_kwargs['StopType'] = {0: 'L', 1: 'U', 2: 'D', 3: 'L'}[self.comboBox_StopType.currentIndex()]
                     order_kwargs['StopLevel'] = self.spinBox_StopLevel.value()
                     order_kwargs['CondType'] = 1
-                    # cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}"
-
                 else:
                     order_kwargs['StopLevel'] = 0
+
             elif _condtype_index == 1:
                 order_kwargs['StopType'] = 'L'
                 order_kwargs['ValidType'] = 0
                 order_kwargs['Price'] = (self.spinBox_StopLevel2.value() + self.spinBox_toler.value()) if BuySell == 'B' \
                     else (self.spinBox_StopLevel2.value() - self.spinBox_toler.value())
                 order_kwargs['StopLevel'] = self.spinBox_StopLevel2.value()
-                # cond = f"{_stoptype_text[order_kwargs['StopType']]} {order_kwargs['StopLevel']}"
                 if self.checkBox_Trailing_Stop.isChecked():
                     order_kwargs['CondType'] = 6
 
@@ -205,23 +191,21 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                         order_kwargs['UpLevel'] = current_price.Ask[0]
                         order_kwargs['UpPrice'] = order_kwargs['StopLevel']
                         order_kwargs['DownLevel'] = self.spinBox_trailing_stop_step.value()
-                        # cond = cond + f"（追<={order_kwargs['UpLevel'] - order_kwargs['DownLevel']})"
                     else:
                         order_kwargs['DownLevel'] = current_price.Bid[0]
                         order_kwargs['DownPrice'] = order_kwargs['StopLevel']
                         order_kwargs['UpLevel'] = self.spinBox_trailing_stop_step.value()
-                        # cond = cond + f"（追>={order_kwargs['DownLevel'] + order_kwargs['UpLevel']})"
+
             elif _condtype_index == 2:
                 order_kwargs['ValidType'] = 0
                 order_kwargs['Price'] = self.spinBox_Price.value()
+
                 if BuySell == 'B':
                     order_kwargs['UpLevel'] = self.spinBox_oco_StopLevel.value()
                     order_kwargs['UpPrice'] = self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()
-                    # cond = f"双向 损:{order_kwargs['UpPrice']}(>={order_kwargs['UpLevel']})"
                 else:
                     order_kwargs['DownLevel'] = self.spinBox_oco_StopLevel.value()
                     order_kwargs['DownPrice'] = self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()
-                    # cond = f"双向 损:{order_kwargs['DownPrice']}(<={order_kwargs['DownLevel']})"
 
             elif _condtype_index == 3:
                 order_kwargs['ValidType'] = 0
@@ -229,31 +213,31 @@ class OrderDialog(QDialog, Ui_Dialog_order):
                 _loss = self.spinBox_bullbear_loss.value()
                 _loss_toler = self.spinBox_bullbear_loss_toler.value()
                 order_kwargs['Price'] = Price = self.spinBox_Price.value()
+
                 if BuySell == 'B':
                     order_kwargs['UpLevel'] = Price + _profit
                     order_kwargs['UpPrice'] = Price + _profit
                     order_kwargs['DownLevel'] = Price - _loss
                     order_kwargs['DownPrice'] = Price - _loss - _loss_toler
-                    # cond = f"牛市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
                 else:
                     order_kwargs['DownLevel'] = Price - _profit
                     order_kwargs['DownPrice'] = Price - _profit
                     order_kwargs['UpLevel'] = Price + _loss
                     order_kwargs['UpPrice'] = Price + _loss + _loss_toler
-                    # cond = f"熊市 = 赚{_profit} 损{_loss}(+{_loss_toler})"
 
             elif _condtype_index == 4:
                 order_kwargs['ValidType'] = 0
                 order_kwargs['Price'] = self.spinBox_Price.value()
                 _sched_time = self.dateTimeEdit_sched_time.dateTime().toPyDateTime()
                 order_kwargs['SchedTime'] = int(_sched_time.timestamp())
-                # cond = f">={_sched_time}"
+
             cond = get_order_cond(order_kwargs)
         except Exception as e:
             print(e)
             # raise e
         else:
             comfirm_order = ComfirmDialog(self, Cond=cond, **order_kwargs)
+
             if self.checkBox_invalid.isChecked():
                 comfirm_order.label_subtitle.setText('新增无效指示')
                 comfirm_order.show()
@@ -267,6 +251,7 @@ class OrderDialog(QDialog, Ui_Dialog_order):
         self.comboBox_CondType.setCurrentIndex(2)
         self._price_flag = False
         self._oco_sl_flag = False
+
         if net_qty > 0:
             self.lineEdit_ProdCode.setText(prodcode)
             self.lineEdit_ProdCode.update()
@@ -310,12 +295,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.message = QMessageBox(self)
         self.message.setModal(True)
         self.data = QData(self)
-        # self.acc_info = {}
-        # self.trades_info = []
-        # self.pos_info = {}
-        # self.order_info = {}
         self.PL = {}
-        # self.sub_list = []
         self.init_signal()
         self.info_update = [self.refresh_acc_info,
                             self.refresh_orders,
@@ -340,13 +320,10 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)
         self.warning_sig.connect(lambda title, text: self.message.warning(self.parent(), title, text))
         self.info_sig.connect(lambda title, text: self.message.information(self.parent(), title, text))
-        # self.pushButton_test.released.connect(lambda :print(get_product_by_code('HSIK8')))
         self.acc_info_sig.connect(self.update_acc_info)
         self.pushButton_OrderAssistant.toggled.connect(self.OrderAssistant.setVisible)
         self.pos_info_sig.connect(self.OrderAssistant.calc_amount_base)
-        # self.OrderAssistant.pushButton_calc_tp_sl.released.connect(lambda :self.OrderAssistant.calc_amount_base(self.pos_info))
         self.OrderAssistant.oco_close_sig.connect(self.Order.oco_close)
-
         self.pushButton_del_order.released.connect(self._del_current_selected_order)
         self.pushButton_activate_order.released.connect(self._activate_selected_order)
         self.pushButton_inactivate_order.released.connect(self._inactivate_selected_order)
@@ -354,9 +331,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.pushButton_activate_all_orders.released.connect(self._activate_all_orders)
         self.pushButton_inactivate_all_orders.released.connect(self._inactivate_all_orders)
         self.pushButton_close_order.released.connect(self._close_position)
-
         self.QuickOrder.checkBox_Lock.toggled.connect(lambda b: self.QuickOrder.position_takeprofit_info_update(self.data.Trade) if b else ...)
-
         self.toolButton_update_info.released.connect(lambda: [subscribe_price(p, 1) for p in self.data.sub_list])
         self.toolButton_update_info.released.connect(lambda: [func() for func in self.info_update])
 
@@ -377,15 +352,13 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
                 self.PL[prodcode] = PL
                 self.acc_info_sig.emit(sum(self.PL.values()))
 
-    # def update_trade_info(self, trade_dict):
-    #     self.trades_info.append(trade_dict)
-
     def update_acc_info(self, PL):
         ccy = self.data.Acc['BaseCcy'].decode()
         BuyingPower = self.data.Acc['CashBal'] + self.data.Acc['CreditLimit'] + PL - self.data.Acc['IMargin']
         NAV = self.data.Acc['CashBal'] + PL
         MarginCall = self.data.Acc['IMargin'] - (self.data.Acc['CashBal'] + self.data.Acc['CreditLimit'] + PL) if (self.data.Acc['CashBal'] + self.data.Acc['CreditLimit'] + PL) < self.data.Acc['IMargin'] else 0
         CommodityPL = PL
+
         try:
             MarginLevel = (self.data.Acc['CashBal'] + self.data.Acc['CreditLimit'] + PL) / \
                           self.data.Acc['IMargin']
@@ -480,12 +453,6 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             QMessageBox.critical(self, 'CRITICAL-更新ACC', str(e))
 
     def _refresh_acc_info(self, a):
-        # acc_info_dict = {}
-        # for name, c_type in a._fields_:
-        #     acc_info_dict[name] = getattr(a, name)
-        #
-        # self.acc_info = acc_info_dict
-
         self.data._update_acc(a)
         acc_info_dict = self.data.Acc
         base_ccy = acc_info_dict['BaseCcy'].decode()
@@ -531,10 +498,6 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             QMessageBox.critical(self, 'CRITICAL-更新ORDER', str(e))
 
     def _refresh_order(self, o):
-        # order_dict = {}
-        # for name, c_type in o._fields_:
-        #     order_dict[name] = getattr(o, name)
-        # self.order_info_sig.emit(order_dict)
         self.data._update_order(o)
         order_dict = self.data.Order[o.IntOrderNo]
         self.order_info_sig.emit(order_dict)
@@ -566,7 +529,6 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         for i, s in zip(range(14), map(str, order_info)):
             self.tableWidget_orders.setItem(r, i, QTableWidgetItem(s))
         self.tableWidget_orders.viewport().update()
-        # AccInfo.tableWidget_orders.set_item_sig.emit(r, i, s)
 
         if order_dict['Status'] in [10]:
             self.tableWidget_orders.removeRow(r)
@@ -594,22 +556,11 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             QMessageBox.critical(self, 'CRITICAL-更新POS', str(e))
 
     def _refresh_postion(self, p):
-    #     pos_dict = {}
-    #     for name, c_type in p._fields_:
-    #         pos_dict[name] = getattr(p, name)
-    #     prodcode = pos_dict['ProdCode'].decode()
-    #     if 'HSI' in prodcode:
-    #         leverage = 50
-    #     elif 'MHI' in prodcode:
-    #         leverage = 10
-    #     else:
-    #         leverage = 1
-    #     pos_dict.update(leverage=leverage)
-    #     self.pos_info[pos_dict['ProdCode'].decode('GBK')] = pos_dict
         self.data._update_pos(p)
         prodcode = p.ProdCode.decode()
         pos_dict = self.data.Pos[prodcode]
         r = 0
+
         for i in range(self.tableWidget_pos.rowCount()):
             if pos_dict['ProdCode'] == self.tableWidget_pos.item(i, 0).text():
                 r = i
@@ -641,13 +592,13 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
 
         for i, s in zip(range(14), map(str, pos_info)):
             self.tableWidget_pos.setItem(r, i, QTableWidgetItem(s))
+
         self.tableWidget_pos.viewport().update()
 
         if prodcode not in self.data.sub_list:
             self.data.sub_list.append(prodcode)
 
         self.pos_info_sig.emit(self.data.Pos)
-
         return pos_dict
 
     def refresh_trades(self):
@@ -664,11 +615,6 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             QMessageBox.critical(self, 'CRITICAL-更新TRADE', str(e))
 
     def _refresh_trade(self, t):
-        # trade_dict = {}
-        # for name, c_type in t._fields_:
-        #     trade_dict[name] = getattr(t, name)
-        #
-        # self.update_trade_info(trade_dict)
         self.data._update_trade(t)
         trade_dict = self.data.Trade[t.IntOrderNo]
         if self.QuickOrder.checkBox_Lock.isChecked():
@@ -698,8 +644,8 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
 
         for i, s in zip(range(14), map(str, trade_info)):
             self.tableWidget_trades.setItem(r, i, QTableWidgetItem(s))
-        self.tableWidget_trades.viewport().update()
 
+        self.tableWidget_trades.viewport().update()
         return trade_dict
 
     def refresh_accbals(self):
@@ -714,10 +660,6 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             QMessageBox.critical(self, 'CRITICAL-更新BAL', str(e))
 
     def _refresh_accbals(self, b):
-        # accbal_dict = {}
-        # for name, c_type in b._fields_:
-        #     accbal_dict[name] = getattr(b, name)
-
         self.data._update_bal(b)
         accbal_dict = self.data.Bal[b.Ccy.decode()]
 
@@ -760,17 +702,6 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             self.tableWidget_ccy_rate.viewport().update()
         except Exception as e:
             QMessageBox.critical(self, 'CRITICAL-更新CCY', str(e))
-    #
-    # def create_cond_text(self, **kwargs):
-    #     _stoptype_text = {'L': '损>=' if kwargs['BuySell'] == 'B' else '损<=',
-    #                       'U': '升>=',
-    #                       'D': '跌<='}
-
-        # condtype = kwargs['CondType']
-        #
-        # if condtype == 0:
-        #     ...
-        # elif condtype==
 
 
 class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
@@ -785,7 +716,6 @@ class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
 
     def login_waring(self, text):
         QtWidgets.QMessageBox.critical(self,'CRITICAL-登录',text)
-
 
     def set_info(self, info):
         self.lineEdit_host.setText(info['host'])
@@ -841,7 +771,6 @@ class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):
         self.pushButton_Long.released.connect(lambda :self.close_position('B'))
         self.pushButton_Short.released.connect(lambda :self.close_position('S'))
 
-
     def sub_prodcode(self, prodcode):
         if subscribe_price(prodcode, 1) != 0:
             mb = QMessageBox()
@@ -849,7 +778,6 @@ class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):
             mb.accepted.connect(self.close)
         else:
             QMessageBox.information(self, f'INFO-订阅成功', f'订阅{prodcode}数据成功')
-
 
     def close_position(self, BuySell):
         try:
@@ -874,8 +802,6 @@ class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):
             comfirm_order.show()
             comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
             comfirm_order.accepted.connect(lambda :self.accept())
-
-
 
 
 class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
@@ -940,8 +866,6 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         self.checkBox_Lock.toggled.connect(lambda b: [subscribe_price(self.lineEdit_ProdCode.text(), 1),time.sleep(0.5), self.adjust_ui(25)] if b else ...)
         self.pushButton_close_position.released.connect(self.close_all_position)
 
-
-
     def adjust_ui(self, n):
         try:
             last_price = get_price_by_code(self.lineEdit_ProdCode.text()).Last[0]
@@ -967,11 +891,9 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             self.working_order_update()
             self.tableWidget_Price.viewport().update()
             m = self.tableWidget_Price.verticalScrollBar().maximum() // 2
-            # print(m)
             self.tableWidget_Price.verticalScrollBar().setValue(m)
             # self.tableWidget_Price.selectRow(self.tableWidget_Price.currentRow()-3)
             # self.tableWidget_Price.verticalScrollBar().
-
 
     def working_order_update(self):
         orders = get_orders_by_array()
@@ -1006,9 +928,6 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         asks_loc = []
         if self._price_active&(price_dict['ProdCode'].decode('GBK') == self.lineEdit_ProdCode.text()):
             for i in range(5):
-                # bid.append((price_dict['Bid'][i], ))
-                # ask.append((price_dict['Ask'][i], price_dict['AskQty'][i]))
-                # print(self.price_location[price_dict['Bid'][i]], 0, price_dict['BidQty'][i])
                 bid_loc = self.price_location.get(price_dict['Bid'][i])
                 ask_loc = self.price_location.get(price_dict['Ask'][i])
                 if bid_loc:
@@ -1020,6 +939,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
 
             bid_empty_loc = set(self.price_location.values()) - set(bids_loc)
             ask_empty_loc = set(self.price_location.values()) - set(asks_loc)
+
             for n, m in zip(bid_empty_loc, ask_empty_loc):
                 self.tableWidget_Price.item(n, 2).setText('')
                 self.tableWidget_Price.item(m, 6).setText('')
@@ -1028,13 +948,16 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             bid1_loc = self.price_location.get(price_dict['Bid'][0])
             ask1_loc = self.price_location.get(price_dict['Ask'][0])
             color_map = {bid1_loc: '#FF0000', ask1_loc: '#00FF00'}
+
             for i in self.price_location.values():
                 color = color_map.get(i, '#FFFFFF')
                 self.tableWidget_Price.item(i, 4).setBackground(QColor(color))
+
                 if i == last1_loc:
                     self.tableWidget_Price.item(i, 4).setFont(QFont('Microsoft YaHei', 9, QFont.Bold))
                 else:
                     self.tableWidget_Price.item(i, 4).setFont(QFont('Microsoft YaHei', 9, QFont.Normal))
+
             self.tableWidget_Price.viewport().update()
 
     def price_info_update(self, price_dict):
@@ -1089,7 +1012,6 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
                 self.holding_pos = (holding_pos_num, sum(self.trade_short_queue[-1:-(-holding_pos_num + 1):-1]) / -holding_pos_num)
 
             self.label_closed_profit.setText(f'{close_pos_takeprofit * leverage:,.2f}')
-
             self.label_pos.setText(f'{self.holding_pos[0]}@{self.holding_pos[1]:,.2f}')
 
     def holding_profit(self, price_dict):
@@ -1165,7 +1087,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         self.pushButton_tp_pos_by_pos.released.connect(self.tp_pos_by_pos)
         self.pushButton_sl_pos_by_pos.released.connect(self.sl_pos_by_pos)
 
-
     def init_auto_tp_sl(self):
         try:
             orders = get_orders_by_array()
@@ -1180,7 +1101,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
                         self.checkBox_auto_sl.setChecked(True)
         except Exception as e:
             print(e)
-
 
     def init_auto_takeprofit(self):
         if self.lineEdit_ProdCode.text() != self.last_price.get('ProdCode', b'').decode():
@@ -1321,7 +1241,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             leverage = 1
 
         pos = get_pos_by_product(prodcode)
-
         pre_pos = pos.Qty
         pre_pos_price = pos.TotalAmt  / pre_pos if pre_pos !=0 else 0
             # .sort(key=lambda x:x['IntOrderNo'])
@@ -1339,7 +1258,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
                 self.trade_long_queue.extend(current_trade)
             else:
                 self.trade_short_queue.extend(current_trade)
-
 
         close_pos_takeprofit = reduce(add, [s-l for l, s in zip(self.trade_long_queue, self.trade_short_queue) ]) if len(self.trade_long_queue) != 0 and len(self.trade_short_queue) != 0 else 0
         long_qty = len(self.trade_long_queue)
@@ -1423,10 +1341,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         else:
             QMessageBox.warning(self, 'WARING-逐仓止盈', '无持仓')
 
-
-
-
-
     def calc_amount_base(self, pos_info):
         prodcode = self.lineEdit_ProdCode.text()
         p = pos_info.get(prodcode)
@@ -1438,8 +1352,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             self.lineEdit_takeprofit_price.setText(f'{self.net_qty}@{self.tp:.2f}')
             self.lineEdit_stoploss_price.setText(f'{self.net_qty}@{self.sl:.2f}')
         else:
-            # QMessageBox.warning(self, 'WARING-计算', f'合约{prodcode}未有任何持仓')
-            ...
+            QMessageBox.warning(self, 'WARING-计算', f'合约{prodcode}未有任何持仓')
 
     def oco_close_position(self):
         prodcode = self.lineEdit_ProdCode.text()
@@ -1450,8 +1363,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             self.oco_close_sig.emit(prodcode, net_qty, tp, sl)
         else:
             QMessageBox.warning(self, 'WARING-双向限价平仓', f'合约{prodcode}未有任何持仓，无法下平仓指令')
-
-
 
 
 class ComfirmDialog(QtWidgets.QDialog, Ui_Dialog_order_comfirm):
@@ -1480,14 +1391,63 @@ class MainWindow(QtWidgets.QMainWindow):
     info_sig = pyqtSignal(str, str, int)
     def __init__(self, parent=None, *args, **kwargs):
         QtWidgets.QMainWindow.__init__(self, parent, *args, **kwargs)
+        self.login_status = False
+        self.handle_queue = Queue()
         self.timer = QtCore.QTimer(self)
         self.wechat_info = QWechatInfo(self)
         self.order_pub = QPubOrder(self)
         self.order_sub = QSubOrder(self.order_pub.order_queue, self)
+        self.Login = SpLoginDialog(self)
+        self.AccInfo = AccInfoWidget(self)
+        self.update_thread = Thread(target=self.info_handler)
+        self.update_thread.start()
         self.init_signal()
+        self.init_callback()  # 初始化回调函数
 
     def init_signal(self):
         self.info_sig.connect(self.popup)
+        self.login_sig.connect(self.showMaximized)
+        self.login_sig.connect(self.AccInfo.show)
+        self.login_sig.connect(lambda: self.Login.close())
+        self.AccInfo.checkBox_follow_orders.toggled.connect(
+            lambda b: self.init_order_follower() if b else self.deinit_order_follower())
+        self.login_sig.connect(lambda: [self.AccInfo.refresh_accbals(), self.AccInfo.refresh_ccy_rate()])
+        self.login_sig.connect(
+            lambda: self.timer.singleShot(3000, lambda: [subscribe_price(p, 1) for p in self.AccInfo.data.sub_list]))
+        self.AccInfo.pushButton_test.released.connect(self.init_sql_table)
+        self.AccInfo.checkBox_wechat_info.clicked.connect(
+            lambda b: self.init_wechat_info() if b else self.deinit_wechat_info())
+        self.wechat_info.login_sig.connect(self.AccInfo.checkBox_wechat_info.setChecked)
+        self.wechat_info.finished.connect(lambda: self.AccInfo.checkBox_wechat_info.setChecked(False))
+        self.Login.pushButton_login.released.connect(self.init_api_sig)
+        self.init_api_sig.connect(lambda: self.init_spapi())
+
+    def init_spapi(self):
+        Login = self.Login
+        host = Login.lineEdit_host.text()
+        port = Login.lineEdit_port.text()
+        License = Login.lineEdit_license.text()
+        app_id = Login.lineEdit_app_id.text()
+        user_id = Login.lineEdit_user_id.text()
+        password = Login.lineEdit_password.text()
+        info = {'host': host, 'port': int(port), 'License': License, 'app_id': app_id, 'user_id': user_id}
+
+        Login.pickle_info()
+
+        if initialize() == 0:
+            self.info_handle('<API>', '初始化成功')
+            set_login_info(**info, password=password)
+            self.info_handle('<连接>',
+                        f"设置登录信息-host:{info['host']} port:{info['port']} license:{info['License']} app_id:{info['app_id']} user_id:{info['user_id']}")
+            login()
+            self.AccInfo.bind_account(info['user_id'])
+
+    def deinit_spapi(self):
+        if logout() == 0:
+            self.info_handle('<连接>', f'{c_char_p_user_id.value.decode()}登出请求发送成功')
+            if unintialize() == 0:
+                self.info_handle('<API>', '释放成功')
+                self.login_status = False
 
     def popup(self,title, context, e_time=0):
         mb = QMessageBox(self)
@@ -1497,7 +1457,6 @@ class MainWindow(QtWidgets.QMainWindow):
         mb.show()
         if e_time != 0:
             self.timer.singleShot(e_time, mb.close)
-
 
     def init_order_follower(self):
         self.order_pub.finished.connect(lambda :self.popup('<INFO-跟单>', '交易发布已停止', 8000))
@@ -1526,6 +1485,25 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, 'CRITICAL-SQLTable初始化', f'错误:{e}')
 
+    def info_handle(self, type, info, handle_type=0, handler=None, *args, **kwargs):
+        if handle_type == 0:
+            print('*LOCAL*' + type + info)
+            if handler is not None:
+                self.handle_queue.put([handler, args, kwargs])
+        elif handle_type == 1:
+            print('*LOCAL*' + type + info)
+            if handler is not None:
+                self.handle_queue.put([handler, args, kwargs])
+            # AccInfo.message_sig.emit('WARNING', handler.decode('GBK'))
+
+    def info_handler(self):
+        while True:
+            handler, arg, kwargs = self.handle_queue.get()
+            try:
+                handler(*arg, **kwargs)
+            except Exception as e:
+                print(e)
+
     def closeEvent(self, a0: QtGui.QCloseEvent):
         reply = QtWidgets.QMessageBox.question(self, '退出', "是否要退出SP下单？",
                                                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
@@ -1539,9 +1517,136 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             a0.ignore()
 
-    @on_business_date_reply  # 登录成功后会返回一个交易日期
-    def business_date_reply(business_date):
-        print('<日期>', f'当前交易日--{dt.datetime.fromtimestamp(business_date)}')
+    def init_callback(self):
+        info_handle = self.info_handle
+        AccInfo = self.AccInfo
+        Login = self.Login
+
+        @on_login_reply  # 登录调用
+        def login_reply(user_id, ret_code, ret_msg):
+            if ret_code == 0:
+                info_handle('<账户>', f'{user_id.decode()}登录成功', 0, self.login_sig.emit)
+                self.login_status = True
+
+            else:
+                info_handle('<账户>', f'{user_id.decode()}登录失败--errcode:{ret_code}--errmsg:{ret_msg.decode()}', 0,
+                            Login.login_error_sig.emit, f'登录失败-{ret_msg.decode()}')
+                self.login_status = False
+
+        @on_business_date_reply  # 登录成功后会返回一个交易日期
+        def business_date_reply(business_date):
+            print('<日期>', f'当前交易日--{dt.datetime.fromtimestamp(business_date)}')
+
+        @on_account_info_push  # 普通客户登入后返回登入前的户口信息
+        def account_info_push(acc_info):
+            info_handle('<账户>',
+                        f'{acc_info.ClientId.decode()}信息--NAV:{acc_info.NAV}-BaseCcy:{acc_info.BaseCcy.decode()}-BuyingPower:{acc_info.BuyingPower}-CashBal:{acc_info.CashBal}',
+                        0, AccInfo._refresh_acc_info, acc_info)
+
+        @on_load_trade_ready_push  # 登入后，登入前已存的成交信息推送
+        def trade_ready_push(rec_no, trade):
+            info_handle('<成交>',
+                        f'历史成交记录--NO:{rec_no}--{trade.OpenClose.decode()}成交@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}',
+                        0, AccInfo._refresh_trade, trade)
+
+        @on_account_position_push  # 普通客户登入后返回登入前的已存在持仓信息
+        def account_position_push(pos):
+            info_handle('<持仓>',
+                        f'历史持仓信息--ProdCode:{pos.ProdCode.decode()}-PLBaseCcy:{pos.PLBaseCcy}-PL:{pos.PL}-Qty:{pos.Qty}-DepQty:{pos.DepQty}',
+                        0, AccInfo._refresh_postion, pos)
+
+        # @on_ticker_update  # ticker数据推送
+        # def ticker_update(ticker):
+        #     ...
+        #
+        #
+
+        @on_api_price_update  # price数据推送
+        def price_update(price):
+            price_dict = {}
+            for name, c_type in price._fields_:
+                price_dict[name] = getattr(price, name)
+            AccInfo.qprice.price_update_sig.emit(price_dict)
+
+        @on_connecting_reply  # 连接状态改变时调用
+        def connecting_reply(host_id, con_status):
+            info_handle('<连接>', f'{HOST_TYPE[host_id]}状态改变--{HOST_CON_STATUS[con_status]}')
+
+        # -----------------------------------------------登入后的新信息回调------------------------------------------------------------------------------
+        @on_order_request_failed  # 订单请求失败时候调用
+        def order_request_failed(action, order, err_code, err_msg):
+            info_handle('<订单>',
+                        f'请求失败--ACTION:{action}-@{order.ProdCode.decode()}-Price:{order.Price}-Qty:{order.Qty}-BuySell:{order.BuySell.decode()}      errcode;{err_code}-errmsg:{err_msg.decode()}',
+                        1, AccInfo.warning_sig.emit, 'WARNING-Order Failed', err_msg.decode('GBK'))
+
+        @on_order_before_send_report  # 订单发送前调用
+        def order_before_snd_report(order):
+            cond = get_order_cond(order)
+            info = f"""
+            代码:{order.ProdCode.decode()}\n
+            方向:{dict(B='买入', S='沽出').get(order.BuySell.decode(), '')}\n
+            价格:{order.Price}\n
+            数量:{order.Qty}\n
+            条件:{cond}"""
+            info_handle('<订单>',
+                        f'即将发送请求--@{order.ProdCode.decode()}-Price:{order.Price}-Qty:{order.Qty}-BuySell:{order.BuySell.decode()}',
+                        0, AccInfo.info_sig.emit, 'INFO-Order Before Send', info)
+
+        @on_order_report  # 订单报告的回调推送
+        def order_report(rec_no, order):
+            info_handle('<订单>', f'编号:{rec_no}-@{order.ProdCode.decode()}-Status:{ORDER_STATUS[order.Status]}', 0,
+                        AccInfo._refresh_order, order)
+
+        @on_trade_report  # 成交记录更新后回调出推送新的成交记录
+        def trade_report(rec_no, trade):
+            info_handle('<成交>',
+                        f'{rec_no}新成交{trade.OpenClose.decode()}--@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}',
+                        0, AccInfo._refresh_trade, trade)
+
+        @on_updated_account_position_push  # 新持仓信息
+        def updated_account_position_push(pos):
+            info_handle('<持仓>',
+                        f'信息变动--@{pos.ProdCode.decode()}-PLBaseCcy:{pos.PLBaseCcy}-PL:{pos.PL}-Qty:{pos.Qty}-DepQty:{pos.DepQty}',
+                        0, AccInfo._refresh_postion, pos)
+
+        @on_updated_account_balance_push  # 户口账户发生变更时的回调，新的账户信息
+        def updated_account_balance_push(acc_bal):
+            info_handle('<结余>',
+                        f'信息变动-{acc_bal.Ccy.decode()}-CashBF:{acc_bal.CashBF}-TodayCash:{acc_bal.TodayCash}-NotYetValue:{acc_bal.NotYetValue}-Unpresented:{acc_bal.Unpresented}-TodayOut:{acc_bal.TodayOut}',
+                        0, AccInfo._refresh_accbals, acc_bal)
+
+        # ------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        # ------------------------------------------------------------请求回调函数------------------------------------------------------------------------------------
+
+        @on_instrument_list_reply  # 产品系列信息的回调推送，用load_instrument_list()触发
+        def inst_list_reply(req_id, is_ready, ret_msg):
+            if is_ready:
+                info_handle('<产品>', f'信息加载成功      req_id:{req_id}-msg:{ret_msg.decode()}')
+            else:
+                info_handle('<产品>', f'信息正在加载......req_id{req_id}-msg:{ret_msg.decode()}')
+
+        @on_product_list_by_code_reply  # 根据产品系列名返回合约信息
+        def product_list_by_code_reply(req_id, inst_code, is_ready, ret_msg):
+            if is_ready:
+                if inst_code == '':
+                    info_handle('<合约>', f'该产品系列没有合约信息      req_id:{req_id}-msg:{ret_msg.decode()}')
+                else:
+                    info_handle('<合约>', f'产品:{inst_code.decode()}合约信息加载成功      req_id:{req_id}-msg:{ret_msg.decode()}')
+            else:
+                info_handle('<合约>', f'产品:{inst_code.decode()}合约信息正在加载......req_id:{req_id}-msg:{ret_msg.decode()}')
+
+        @on_pswchange_reply  # 修改密码调用
+        def pswchange_reply(ret_code, ret_msg):
+            if ret_code == 0:
+                info_handle('<密码>', '修改成功')
+            else:
+                info_handle('<密码>', f'修改失败  errcode:{ret_code}-errmsg:{ret_msg.decode()}')
+
+        self.callback = [login_reply, business_date_reply, account_info_push, trade_ready_push, account_position_push, price_update, connecting_reply,
+                         order_request_failed, order_before_snd_report, order_report, trade_report, updated_account_position_push, updated_account_balance_push,
+                         inst_list_reply, product_list_by_code_reply, pswchange_reply]  # 把所有callback存在一个list，防止GC
+
 
 class TimeWidget(QtWidgets.QWidget, Ui_Form_time):
     def __init__(self, parent=None):
@@ -1552,7 +1657,6 @@ class TimeWidget(QtWidgets.QWidget, Ui_Form_time):
         self.timer = QtCore.QTimer(self)
         self.init_signal()
         self.move((QDesktopWidget().width() -self.width()) / 2, 30)
-
 
     def init_signal(self):
         self.timer.timeout.connect(self.update_sys_time)

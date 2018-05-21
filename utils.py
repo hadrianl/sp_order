@@ -61,3 +61,11 @@ def get_order_cond(order):
         cond = f">={_sched_time}"
 
     return cond
+
+
+def print_info(info_array):
+    info_dict = {}
+    for i in info_array:
+        for name, c_type in i._fields_:
+            info_dict[name] = getattr(i, name)
+        print(info_dict)
