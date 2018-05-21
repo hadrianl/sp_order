@@ -13,7 +13,7 @@ from ui.sp_login import Ui_Dialog_sp_login
 from ui.quick_order_dialog import Ui_Dialog_quick_order
 from ui.order_comfirm_dialog import Ui_Dialog_order_comfirm
 from ui.close_position_dialog import Ui_Dialog_close_position
-from baseitems import QPriceUpdate, QPubOrder, QSubOrder, QWechatInfo
+from baseitems import QPubOrder, QSubOrder, QWechatInfo
 from ui.order_assistant_widget import Ui_Form_OrderAssistant
 from ui.time_widget import Ui_Form_time
 from spapi.spAPI import *
@@ -85,6 +85,7 @@ class OrderDialog(QDialog, Ui_Dialog_order):
         self.init_signal()
 
     def init_state(self):
+        self.setWindowFlags(Qt.Qt.WindowStaysOnTopHint)
         self.dateEdit_ValidTime.setDate(dt.datetime.now().date())
         self.dateTimeEdit_sched_time.setDateTime(dt.datetime.now())
         self.spinBox_market_level.setDisabled(True)
@@ -273,12 +274,18 @@ class OrderDialog(QDialog, Ui_Dialog_order):
             self.show()
             self.checkBox_lock.setChecked(True)
 
+    # def closeEvent(self, a0: QtGui.QCloseEvent):
+    #     self.parent().AccInfo.pushButton_Order.setChecked(False)
+    #     a0.accept()
+
+
 class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
     warning_sig = pyqtSignal(str, str)
     info_sig = pyqtSignal(str, str)
     acc_info_sig = pyqtSignal(float)  # 更新最新盈亏
     pos_info_sig = pyqtSignal(dict)  # 仓位更新信号，用于触发持仓的更新等
     order_info_sig = pyqtSignal(dict)  # 下单的订单信号，用于更新止损止盈状态等
+    price_update_sig = pyqtSignal(dict)  # 价格更新信号
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_acc_info.__init__(self)
@@ -286,10 +293,9 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         desktop = QDesktopWidget()
         self.move(desktop.width() - self.width(), (desktop.height() + self.height()) / 2)
         # self.move(self.parent().width() - self.width(), (self.parent().height() + self.height()) / 2)
-        self.setWindowFlags(Qt.Qt.Window)
+        self.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)
         self.Order = OrderDialog(self.parent())
         self.QuickOrder = QuickOrderDialog(self.parent())
-        self.qprice = QPriceUpdate()
         self.OrderAssistant = OrderAssistantWidget(self)
         self.time = TimeWidget(self)
         self.message = QMessageBox(self)
@@ -308,22 +314,23 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.Order.comboBox_account.addItem(account_id)
 
     def init_signal(self):
-        self.qprice.price_update_sig.connect(self.QuickOrder.price_table_update)
-        self.qprice.price_update_sig.connect(self.QuickOrder.price_info_update)
-        self.qprice.price_update_sig.connect(self.QuickOrder.holding_profit)
-        self.qprice.price_update_sig.connect(self.update_pos_info)
+        self.price_update_sig.connect(self.QuickOrder.price_table_update)
+        self.price_update_sig.connect(self.QuickOrder.price_info_update)
+        self.price_update_sig.connect(self.QuickOrder.holding_profit)
+        self.price_update_sig.connect(self.update_pos_info)
         self.pushButton_Order.toggled.connect(self.Order.setVisible)
         self.pushButton_QuickOrder.toggled.connect(self.QuickOrder.setVisible)
-        self.Order.lineEdit_ProdCode.textChanged.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))
-        self.QuickOrder.lineEdit_ProdCode.textChanged.connect(lambda text: self.Order.lineEdit_ProdCode.setText(text))
-        self.Order.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)
-        self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)
+        self.Order.lineEdit_ProdCode.textChanged.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))  # 普通下单与快速下单的代码输入绑定
+        self.QuickOrder.lineEdit_ProdCode.textChanged.connect(lambda text: self.Order.lineEdit_ProdCode.setText(text))  # 普通下单与快速下单的代码输入绑定
+        self.Order.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)  # 普通下单与快速下单的代码输入绑定
+        self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)  # 普通下单与快速下单的代码输入绑定
         self.warning_sig.connect(lambda title, text: self.message.warning(self.parent(), title, text))
         self.info_sig.connect(lambda title, text: self.message.information(self.parent(), title, text))
         self.acc_info_sig.connect(self.update_acc_info)
         self.pushButton_OrderAssistant.toggled.connect(self.OrderAssistant.setVisible)
         self.pos_info_sig.connect(self.OrderAssistant.calc_amount_base)
         self.OrderAssistant.oco_close_sig.connect(self.Order.oco_close)
+        # ---------------------订单的处理函数连接按钮----------------------------------
         self.pushButton_del_order.released.connect(self._del_current_selected_order)
         self.pushButton_activate_order.released.connect(self._activate_selected_order)
         self.pushButton_inactivate_order.released.connect(self._inactivate_selected_order)
@@ -331,11 +338,12 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.pushButton_activate_all_orders.released.connect(self._activate_all_orders)
         self.pushButton_inactivate_all_orders.released.connect(self._inactivate_all_orders)
         self.pushButton_close_order.released.connect(self._close_position)
+        # -------------------------------------------------------------------------------
         self.QuickOrder.checkBox_Lock.toggled.connect(lambda b: self.QuickOrder.position_takeprofit_info_update(self.data.Trade) if b else ...)
         self.toolButton_update_info.released.connect(lambda: [subscribe_price(p, 1) for p in self.data.sub_list])
         self.toolButton_update_info.released.connect(lambda: [func() for func in self.info_update])
 
-    def update_pos_info(self, price_dict):
+    def update_pos_info(self, price_dict):  # 根据price来更新持仓盈亏等
         for t in range(self.tableWidget_pos.rowCount()):
             prodcode = price_dict['ProdCode'].decode()
             if  prodcode == self.tableWidget_pos.item(t, 0).text():
@@ -352,7 +360,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
                 self.PL[prodcode] = PL
                 self.acc_info_sig.emit(sum(self.PL.values()))
 
-    def update_acc_info(self, PL):
+    def update_acc_info(self, PL):  # 实时更新持仓的盈亏
         ccy = self.data.Acc['BaseCcy'].decode()
         BuyingPower = self.data.Acc['CashBal'] + self.data.Acc['CreditLimit'] + PL - self.data.Acc['IMargin']
         NAV = self.data.Acc['CashBal'] + PL
@@ -445,6 +453,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         except Exception as e:
             QMessageBox.warning(self, 'WARING-平仓', str(e))
 
+    # -------------------------------------------账户的更新函数--------------------------------------------------------
     def refresh_acc_info(self):
         try:
             acc_info = get_acc_info()
@@ -702,6 +711,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             self.tableWidget_ccy_rate.viewport().update()
         except Exception as e:
             QMessageBox.critical(self, 'CRITICAL-更新CCY', str(e))
+    # -----------------------------------------------------------------------------------------------
 
 
 class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
@@ -754,7 +764,7 @@ class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
         with open('info.plk', 'wb') as f:
             pickle.dump(self.login_info, f)
 
-class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):
+class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):  # 平仓交互界面
     def __init__(self, BuySell, ProdCode, Qty, parent=None):
         QtWidgets.QDialog.__init__(self, parent)
         Ui_Dialog_close_position.__init__(self)
@@ -779,7 +789,7 @@ class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):
         else:
             QMessageBox.information(self, f'INFO-订阅成功', f'订阅{prodcode}数据成功')
 
-    def close_position(self, BuySell):
+    def close_position(self, BuySell):  # 平仓
         try:
             order_kwargs = {}
             order_kwargs['ProdCode'] = self.lineEdit_ProdCode.text()
@@ -804,11 +814,12 @@ class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):
             comfirm_order.accepted.connect(lambda :self.accept())
 
 
-class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
+class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):  # 快速下单界面
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Dialog_quick_order.__init__(self)
         self.setupUi(self)
+        self.setWindowFlags(Qt.Qt.WindowStaysOnTopHint)
         self.tableWidget_Price.setColumnWidth(0, 30)
         self.tableWidget_Price.setColumnWidth(3, 30)
         self.tableWidget_Price.setColumnWidth(4, 70)
@@ -842,7 +853,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             comfirm_order.show()
             comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
 
-    def close_all_position(self):
+    def close_all_position(self):  # 一键平仓
         try:
             prodcode = self.lineEdit_ProdCode.text()
             pos = get_pos_by_product(prodcode)
@@ -860,13 +871,13 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
     def init_signal(self):
         # self.checkBox_Lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
         self.pushButton_price_to_middle.released.connect(lambda :self.adjust_ui(25))
-        self.tableWidget_Price.itemDoubleClicked.connect(lambda i: self.doubleclick_order(i.row(), i.column()))
+        self.tableWidget_Price.itemDoubleClicked.connect(lambda i: self.doubleclick_order(i.row(), i.column()))  # 双击下单的信号连接
         self.pushButton_long.released.connect(lambda :self.addition_toler_order('B'))
         self.pushButton_short.released.connect(lambda: self.addition_toler_order('S'))
         self.checkBox_Lock.toggled.connect(lambda b: [subscribe_price(self.lineEdit_ProdCode.text(), 1),time.sleep(0.5), self.adjust_ui(25)] if b else ...)
         self.pushButton_close_position.released.connect(self.close_all_position)
 
-    def adjust_ui(self, n):
+    def adjust_ui(self, n):  # 置中调整点击下单table
         try:
             last_price = get_price_by_code(self.lineEdit_ProdCode.text()).Last[0]
         except Exception as e:
@@ -895,14 +906,12 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             # self.tableWidget_Price.selectRow(self.tableWidget_Price.currentRow()-3)
             # self.tableWidget_Price.verticalScrollBar().
 
-    def working_order_update(self):
+    def working_order_update(self):  # 处理现有的订单在点击下单table中的显示
         orders = get_orders_by_array()
         bid_qty_loc = []
         ask_qty_loc =[]
         for order in [o for o in orders if (o.ProdCode.decode('GBK') == self.lineEdit_ProdCode.text())&(o.Status in [1, 3, 8])]:
             price_loc = self.price_location.get(order.Price)
-            print(price_loc)
-            print(order.Qty)
             if (order.BuySell.decode() == 'B')&(price_loc is not None):
                 origin_qty = self.tableWidget_Price.item(price_loc, 1).text()
                 if origin_qty:
@@ -923,7 +932,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
         for i in set(self.price_location.values()) - set(ask_qty_loc):
             self.tableWidget_Price.setItem(i, 7, QTableWidgetItem(''))
 
-    def price_table_update(self, price_dict):
+    def price_table_update(self, price_dict):  # 根据price来更新点击下单的table
         bids_loc = []
         asks_loc = []
         if self._price_active&(price_dict['ProdCode'].decode('GBK') == self.lineEdit_ProdCode.text()):
@@ -960,7 +969,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
 
             self.tableWidget_Price.viewport().update()
 
-    def price_info_update(self, price_dict):
+    def price_info_update(self, price_dict):  # 根据推送的price来计算追价情况
         bid = price_dict['Bid'][0]
         ask = price_dict['Ask'][0]
         toler = self.spinBox_toler.value()
@@ -1014,7 +1023,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             self.label_closed_profit.setText(f'{close_pos_takeprofit * leverage:,.2f}')
             self.label_pos.setText(f'{self.holding_pos[0]}@{self.holding_pos[1]:,.2f}')
 
-    def holding_profit(self, price_dict):
+    def holding_profit(self, price_dict):  # 根据推送的price来计算持仓盈亏
         prodcode = self.lineEdit_ProdCode.text()
         if 'HSI' in prodcode:
             leverage = 50
@@ -1026,7 +1035,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             profit = (price_dict['Last'][0] - self.holding_pos[1]) * self.holding_pos[0]
             self.label_holding_porfit.setText(f'{profit * leverage:,.2f}')
 
-    def doubleclick_order(self, row, column):
+    def doubleclick_order(self, row, column):  # 双击下单
         price = float(self.tableWidget_Price.item(row, 4).text())
         if column == 3:
             buysell = 'B'
@@ -1035,7 +1044,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
             buysell = 'S'
             self.order(buysell, price)
 
-    def addition_toler_order(self, buysell):
+    def addition_toler_order(self, buysell):  # 追价下单
         try:
             price = get_price_by_code(self.lineEdit_ProdCode.text())
         except Exception as e:
@@ -1049,6 +1058,10 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):
                 limit_price = ask - self.spinBox_toler.value()
             self.order(buysell, limit_price)
 
+    # def closeEvent(self, a0: QtGui.QCloseEvent):
+    #     self.parent().AccInfo.pushButton_QuickOrder.setChecked(False)
+    #     a0.accept()
+
 
 class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
     oco_close_sig = pyqtSignal(str, int, float, float)
@@ -1057,7 +1070,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_OrderAssistant.__init__(self)
         self.setupUi(self)
-        self.setWindowFlags(Qt.Qt.Window)
+        self.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)
         self.holding_qty = 0
         self.holding_pos_amt = 0
         self.trailing_best_price = None
@@ -1072,9 +1085,9 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         # self.parent().pos_info_sig.connect(lambda p:self.update_holding_pos())
         self.lineEdit_ProdCode.editingFinished.connect(self.update_holding_pos_LIFO)
         self.parent().pos_info_sig.connect(lambda p:self.update_holding_pos_LIFO())
-        self.checkBox_trailing_stop.toggled.connect(lambda b: self.parent().qprice.price_update_sig.connect(self.update_trailing_stop) if b else self.parent().qprice.price_update_sig.disconnect(self.update_trailing_stop))
-        self.parent().qprice.price_update_sig.connect(lambda p: self.lineEdit_price.setText(str(p['Last'][0])) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
-        self.parent().qprice.price_update_sig.connect(lambda p: setattr(self, 'last_price', p) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
+        self.checkBox_trailing_stop.toggled.connect(lambda b: self.parent().price_update_sig.connect(self.update_trailing_stop) if b else self.parent().price_update_sig.disconnect(self.update_trailing_stop))
+        self.parent().price_update_sig.connect(lambda p: self.lineEdit_price.setText(str(p['Last'][0])) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
+        self.parent().price_update_sig.connect(lambda p: setattr(self, 'last_price', p) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
 
         self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_tp.setChecked(True) if o['ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 1 and o['Ref'].decode() =='auto_tp' else ...)
         self.parent().order_info_sig.connect(lambda o: self.checkBox_auto_tp.setChecked(False) if o[ 'ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 10 and o['Ref'].decode() == 'auto_tp' else ...)
@@ -1087,10 +1100,10 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         self.pushButton_tp_pos_by_pos.released.connect(self.tp_pos_by_pos)
         self.pushButton_sl_pos_by_pos.released.connect(self.sl_pos_by_pos)
 
-    def init_auto_tp_sl(self):
+    def init_auto_tp_sl(self):  # 产品代码输出后， 初始化原来的止损止盈情况
         try:
             orders = get_orders_by_array()
-            self.checkBox_auto_tp.setChecked(True)
+            self.checkBox_auto_tp.setChecked(False)
             self.checkBox_auto_sl.setChecked(False)
             for o in orders:
                 if o.Status in [1, 3] and o.ProdCode.decode() == self.lineEdit_ProdCode.text():
@@ -1102,7 +1115,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         except Exception as e:
             print(e)
 
-    def init_auto_takeprofit(self):
+    def init_auto_takeprofit(self):  # 初始化自动止盈
         if self.lineEdit_ProdCode.text() != self.last_price.get('ProdCode', b'').decode():
             QMessageBox.critical(self, 'CRITICAL-自动止盈', '请检查合约代码')
             return
@@ -1122,7 +1135,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
                           Qty=int(-self.holding_qty), ValidType=0, CondType=0, OrderType=0, Price=price,
                           Ref='auto_tp')
 
-    def deinit_auto_takeprofit(self):
+    def deinit_auto_takeprofit(self):  # 取消自动止盈
         try:
             orders = get_orders_by_array()
             for o in orders:
@@ -1131,7 +1144,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         except Exception as e:
             print(e)
 
-    def init_auto_stoploss(self):
+    def init_auto_stoploss(self):  # 初始化自动止损
         if self.lineEdit_ProdCode.text() != self.last_price.get('ProdCode', b'').decode():
             QMessageBox.critical(self, 'CRITICAL-自动止损', '请检查合约代码')
             return
@@ -1153,7 +1166,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
                           StopType='L', StopLevel=price + self.spinBox_stoploss_toler.value(),
                           Ref='auto_sl')
 
-    def deinit_auto_stoploss(self):
+    def deinit_auto_stoploss(self):  # 取消自动止损
         try:
             orders = get_orders_by_array()
             for o in orders:
@@ -1162,7 +1175,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         except Exception as e:
             print(e)
 
-    def update_holding_pos(self):
+    def update_holding_pos(self):  #先进先出方法计算持仓
         pos = self.parent().pos_info.get(self.lineEdit_ProdCode.text())
         if pos is not None:
             qty = pos['Qty'] if pos['LongShort'] == b'B' else -pos['Qty']
@@ -1179,7 +1192,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             self.lineEdit_holding_qty.setText('-')
             self.lineEdit_holding_price.setText('-')
 
-    def update_holding_pos_LIFO(self):
+    def update_holding_pos_LIFO(self):  # 后进先出方法计算持仓
         try:
             self.holding_qty, holding_pos = self._get_holding_pos(self.parent().data.Trade)
         except Exception as e:
@@ -1194,7 +1207,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
                 self.lineEdit_holding_qty.setText('-')
                 self.lineEdit_holding_price.setText('-')
 
-    def update_trailing_stop(self, price):
+    def update_trailing_stop(self, price):  # 基于price更新追踪止损
         toler = self.spinBox_trailing_toler.value()
         if price['ProdCode'].decode() != self.lineEdit_ProdCode.text():
             return
@@ -1230,7 +1243,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
                 self.horizontalSlider_toler.setMinimum(int(self.trailing_best_price))
                 self.horizontalSlider_toler.setMaximum(int(self.trailing_close_price))
 
-    def _get_holding_pos(self, trades_info):
+    def _get_holding_pos(self, trades_info):  # 获取持仓
         prodcode = self.lineEdit_ProdCode.text()
         current_trades = [trade for Id, trade in trades_info.items() if trade['ProdCode'].decode('GBK') == prodcode]
         if 'HSI' in prodcode:
@@ -1273,7 +1286,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
 
         return holding_qty, holding_pos
 
-    def sl_pos_by_pos(self):
+    def sl_pos_by_pos(self):  # 逐仓计算止损
         try:
             holding_qty, holding_pos = self._get_holding_pos(self.parent().data.Trade)
         except Exception as e:
@@ -1308,7 +1321,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         else:
             QMessageBox.warning(self, 'WARING-逐仓止损', '无持仓')
 
-    def tp_pos_by_pos(self):
+    def tp_pos_by_pos(self):  # 逐仓计算止盈
         try:
             holding_qty, holding_pos = self._get_holding_pos(self.parent().data.Trade)
         except Exception as e:
@@ -1341,7 +1354,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         else:
             QMessageBox.warning(self, 'WARING-逐仓止盈', '无持仓')
 
-    def calc_amount_base(self, pos_info):
+    def calc_amount_base(self, pos_info):  # 计算持仓及相关止损止盈下的价格
         prodcode = self.lineEdit_ProdCode.text()
         p = pos_info.get(prodcode)
         if p:
@@ -1354,7 +1367,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         else:
             QMessageBox.warning(self, 'WARING-计算', f'合约{prodcode}未有任何持仓')
 
-    def oco_close_position(self):
+    def oco_close_position(self):  # 双向限价平仓
         prodcode = self.lineEdit_ProdCode.text()
         net_qty = getattr(self, 'net_qty', 0)
         tp = getattr(self, 'tp', 0)
@@ -1365,7 +1378,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             QMessageBox.warning(self, 'WARING-双向限价平仓', f'合约{prodcode}未有任何持仓，无法下平仓指令')
 
 
-class ComfirmDialog(QtWidgets.QDialog, Ui_Dialog_order_comfirm):
+class ComfirmDialog(QtWidgets.QDialog, Ui_Dialog_order_comfirm):  # 下单的二次确认
     def __init__(self, parent=None, **kwargs):
         QtWidgets.QDialog.__init__(self, parent)
         Ui_Dialog_order_comfirm.__init__(self)
@@ -1387,42 +1400,42 @@ class ComfirmDialog(QtWidgets.QDialog, Ui_Dialog_order_comfirm):
 
 class MainWindow(QtWidgets.QMainWindow):
     login_sig = pyqtSignal()
-    init_api_sig = pyqtSignal()
     info_sig = pyqtSignal(str, str, int)
     def __init__(self, parent=None, *args, **kwargs):
         QtWidgets.QMainWindow.__init__(self, parent, *args, **kwargs)
+        self.setWindowFlags(Qt.Qt.Desktop)
         self.login_status = False
-        self.handle_queue = Queue()
+        self.handle_queue = Queue()  # 处理队列
         self.timer = QtCore.QTimer(self)
-        self.wechat_info = QWechatInfo(self)
-        self.order_pub = QPubOrder(self)
-        self.order_sub = QSubOrder(self.order_pub.order_queue, self)
-        self.Login = SpLoginDialog(self)
-        self.AccInfo = AccInfoWidget(self)
-        self.update_thread = Thread(target=self.info_handler)
+        self.wechat_info = QWechatInfo(self)  # 微信推送类
+        self.order_pub = QPubOrder(self)  # 跟单订单接收类
+        self.order_sub = QSubOrder(self.order_pub.order_queue, self)  # 跟单订单处理类
+        self.Login = SpLoginDialog(self)  # 登录界面
+        self.AccInfo = AccInfoWidget(self)  # 账户信息界面类
+        self.update_thread = Thread(target=self.info_handler)  # 回调信息的处理进程
         self.update_thread.start()
         self.init_signal()
         self.init_callback()  # 初始化回调函数
 
     def init_signal(self):
-        self.info_sig.connect(self.popup)
+        self.info_sig.connect(self.popup)  # inof_sig连接消息的popup
         self.login_sig.connect(self.showMaximized)
         self.login_sig.connect(self.AccInfo.show)
         self.login_sig.connect(lambda: self.Login.close())
         self.AccInfo.checkBox_follow_orders.toggled.connect(
-            lambda b: self.init_order_follower() if b else self.deinit_order_follower())
-        self.login_sig.connect(lambda: [self.AccInfo.refresh_accbals(), self.AccInfo.refresh_ccy_rate()])
+            lambda b: self.init_order_follower() if b else self.deinit_order_follower())  # 绑定跟单的checkbox可以初始化与反初始化跟单
+        self.login_sig.connect(lambda: [self.AccInfo.refresh_accbals(), self.AccInfo.refresh_ccy_rate()])  # 登录时更新结余和汇率
         self.login_sig.connect(
-            lambda: self.timer.singleShot(3000, lambda: [subscribe_price(p, 1) for p in self.AccInfo.data.sub_list]))
-        self.AccInfo.pushButton_test.released.connect(self.init_sql_table)
+            lambda: self.timer.singleShot(3000, lambda: [subscribe_price(p, 1) for p in self.AccInfo.data.sub_list]))  # 登录3秒后会自动订阅sublist的价格，sublist通过持仓的回调函数添加产品代码
+        self.AccInfo.pushButton_test.released.connect(self.init_sql_table)  # 按钮test的测试
         self.AccInfo.checkBox_wechat_info.clicked.connect(
-            lambda b: self.init_wechat_info() if b else self.deinit_wechat_info())
-        self.wechat_info.login_sig.connect(self.AccInfo.checkBox_wechat_info.setChecked)
-        self.wechat_info.finished.connect(lambda: self.AccInfo.checkBox_wechat_info.setChecked(False))
-        self.Login.pushButton_login.released.connect(self.init_api_sig)
-        self.init_api_sig.connect(lambda: self.init_spapi())
+            lambda b: self.init_wechat_info() if b else self.deinit_wechat_info())  # 微信消息推送的初始化与反初始化
+        self.wechat_info.login_sig.connect(self.AccInfo.checkBox_wechat_info.setChecked)  # 微信登入信号为checkbox设置checked
+        self.wechat_info.finished.connect(lambda: self.AccInfo.checkBox_wechat_info.setChecked(False))  # 微信消息推送的线程结束后，取消checkbox的checked
+        self.Login.pushButton_login.released.connect(lambda: self.init_spapi())  # 登录按钮触发init_spapi
+        self.login_sig.connect(self.AccInfo.time.show)
 
-    def init_spapi(self):
+    def init_spapi(self):  # 初始化SPAPI并登录
         Login = self.Login
         host = Login.lineEdit_host.text()
         port = Login.lineEdit_port.text()
@@ -1432,7 +1445,7 @@ class MainWindow(QtWidgets.QMainWindow):
         password = Login.lineEdit_password.text()
         info = {'host': host, 'port': int(port), 'License': License, 'app_id': app_id, 'user_id': user_id}
 
-        Login.pickle_info()
+        Login.pickle_info()  # 把登录信息序列化， 缓存了相关信息
 
         if initialize() == 0:
             self.info_handle('<API>', '初始化成功')
@@ -1442,14 +1455,14 @@ class MainWindow(QtWidgets.QMainWindow):
             login()
             self.AccInfo.bind_account(info['user_id'])
 
-    def deinit_spapi(self):
+    def deinit_spapi(self):  # 登出并反初始化
         if logout() == 0:
             self.info_handle('<连接>', f'{c_char_p_user_id.value.decode()}登出请求发送成功')
             if unintialize() == 0:
                 self.info_handle('<API>', '释放成功')
                 self.login_status = False
 
-    def popup(self,title, context, e_time=0):
+    def popup(self,title, context, e_time=0):  # 主窗体的弹窗方法
         mb = QMessageBox(self)
         mb.move(self.width() - mb.width() - 100, 0)
         mb.setWindowTitle(title)
@@ -1458,7 +1471,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if e_time != 0:
             self.timer.singleShot(e_time, mb.close)
 
-    def init_order_follower(self):
+    def init_order_follower(self):  # 初始化跟单
         self.order_pub.finished.connect(lambda :self.popup('<INFO-跟单>', '交易发布已停止', 8000))
         self.order_sub.finished.connect(lambda : self.popup('<INFO-跟单>', '交易订阅已停止', 5000))
         self.order_pub.started.connect(lambda : self.popup('<INFO-跟单>', '开始发布交易', 8000))
@@ -1472,7 +1485,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.order_pub.close()
         self.order_sub.close()
 
-    def init_wechat_info(self):
+    def init_wechat_info(self):  # 初始化微信推送
         self.wechat_info.finished.connect(lambda: self.popup('INFO-微信推送', '关闭微信信息推送'))
         self.wechat_info.start()
 
@@ -1485,7 +1498,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, 'CRITICAL-SQLTable初始化', f'错误:{e}')
 
-    def info_handle(self, type, info, handle_type=0, handler=None, *args, **kwargs):
+    def info_handle(self, type, info, handle_type=0, handler=None, *args, **kwargs):  # 把回调的消息放进消息队列
         if handle_type == 0:
             print('*LOCAL*' + type + info)
             if handler is not None:
@@ -1496,7 +1509,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.handle_queue.put([handler, args, kwargs])
             # AccInfo.message_sig.emit('WARNING', handler.decode('GBK'))
 
-    def info_handler(self):
+    def info_handler(self):  # 回调的消息队列的处理函数
         while True:
             handler, arg, kwargs = self.handle_queue.get()
             try:
@@ -1517,7 +1530,7 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             a0.ignore()
 
-    def init_callback(self):
+    def init_callback(self):  # 初始化SPAPI的回调函数
         info_handle = self.info_handle
         AccInfo = self.AccInfo
         Login = self.Login
@@ -1566,7 +1579,7 @@ class MainWindow(QtWidgets.QMainWindow):
             price_dict = {}
             for name, c_type in price._fields_:
                 price_dict[name] = getattr(price, name)
-            AccInfo.qprice.price_update_sig.emit(price_dict)
+            AccInfo.price_update_sig.emit(price_dict)
 
         @on_connecting_reply  # 连接状态改变时调用
         def connecting_reply(host_id, con_status):
@@ -1653,7 +1666,7 @@ class TimeWidget(QtWidgets.QWidget, Ui_Form_time):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_time.__init__(self)
         self.setupUi(self)
-        self.setWindowFlags(Qt.Qt.Window | Qt.Qt.FramelessWindowHint)
+        self.setWindowFlags(Qt.Qt.CoverWindow | Qt.Qt.FramelessWindowHint | Qt.Qt.WindowStaysOnBottomHint)
         self.timer = QtCore.QTimer(self)
         self.init_signal()
         self.move((QDesktopWidget().width() -self.width()) / 2, 30)
@@ -1661,8 +1674,7 @@ class TimeWidget(QtWidgets.QWidget, Ui_Form_time):
     def init_signal(self):
         self.timer.timeout.connect(self.update_sys_time)
         self.timer.start(1000)
-        self.parent().qprice.price_update_sig.connect(lambda p:self.update_data_time(p['Timestamp']))
-        self.parent().parent().login_sig.connect(self.show)
+        self.parent().price_update_sig.connect(lambda p:self.update_data_time(p['Timestamp']))
 
     def update_sys_time(self):
         t = dt.datetime.now().time()

@@ -30,10 +30,6 @@ class QInfoWidget(QTableWidget):
         self.set_item_sig[int, int, QIcon].connect(lambda x, y, icon: self.setItem(x, y, QTableWidgetItem(icon, '')))
         self.update_item_sig.connect(lambda x,y,s: self.item(x, y).setText(s))
 
-class QPriceUpdate(QObject):
-    price_update_sig = pyqtSignal(dict)
-    def __init__(self, parent=None):
-        QObject.__init__(self, parent)
 
 class QPubOrder(QThread):
     def __init__(self, parent=None, dbconfig=None):
@@ -293,7 +289,7 @@ class QData(QObject):
         self.order_update_sig.connect(self.__order_info.update)
         self.trade_update_sig.connect(self.__trade_info.update)
         self.ccy_update_sig.connect(self.__ccy_info.update)
-        self.parent().qprice.price_update_sig.connect(self._update_product)
+        self.parent().price_update_sig.connect(self._update_product)
 
     def _update_pos(self, p):
         pos_dict = {}
