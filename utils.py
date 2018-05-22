@@ -23,7 +23,7 @@ def get_order_cond(order):
     if not isinstance(order, dict):
         for name, c_type in order._fields_:
             v = getattr(order, name)
-            v = v.decode('big5') if isinstance(v, bytes) else v
+            v = v.decode() if isinstance(v, bytes) else v
             order_kwargs[name] = v
     else:
         order_kwargs = order

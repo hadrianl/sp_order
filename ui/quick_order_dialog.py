@@ -6,7 +6,7 @@
 #
 # WARNING! All changes made in this file will be lost!
 
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 class Ui_Dialog_quick_order(object):
     def setupUi(self, Dialog_quick_order):
@@ -109,33 +109,25 @@ class Ui_Dialog_quick_order(object):
         self.verticalLayout_7.setObjectName("verticalLayout_7")
         self.pushButton_long = QtWidgets.QPushButton(Dialog_quick_order)
         self.pushButton_long.setEnabled(False)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.pushButton_long.sizePolicy().hasHeightForWidth())
         self.pushButton_long.setSizePolicy(sizePolicy)
         self.pushButton_long.setObjectName("pushButton_long")
         self.verticalLayout_7.addWidget(self.pushButton_long)
-        self.label_long_info = QtWidgets.QLabel(Dialog_quick_order)
-        self.label_long_info.setText("")
-        self.label_long_info.setObjectName("label_long_info")
-        self.verticalLayout_7.addWidget(self.label_long_info)
         self.horizontalLayout_8.addLayout(self.verticalLayout_7)
         self.verticalLayout_8 = QtWidgets.QVBoxLayout()
         self.verticalLayout_8.setObjectName("verticalLayout_8")
         self.pushButton_short = QtWidgets.QPushButton(Dialog_quick_order)
         self.pushButton_short.setEnabled(False)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.pushButton_short.sizePolicy().hasHeightForWidth())
         self.pushButton_short.setSizePolicy(sizePolicy)
         self.pushButton_short.setObjectName("pushButton_short")
         self.verticalLayout_8.addWidget(self.pushButton_short)
-        self.label_short_info = QtWidgets.QLabel(Dialog_quick_order)
-        self.label_short_info.setText("")
-        self.label_short_info.setObjectName("label_short_info")
-        self.verticalLayout_8.addWidget(self.label_short_info)
         self.horizontalLayout_8.addLayout(self.verticalLayout_8)
         self.horizontalLayout_7 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_7.setObjectName("horizontalLayout_7")

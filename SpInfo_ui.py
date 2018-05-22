@@ -324,11 +324,12 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.pushButton_del_all_orders.released.connect(self._del_all_orders)
         self.pushButton_activate_all_orders.released.connect(self._activate_all_orders)
         self.pushButton_inactivate_all_orders.released.connect(self._inactivate_all_orders)
-        self.pushButton_close_order.released.connect(self._close_position)
         # -------------------------------------------------------------------------------
         # self.QuickOrder.checkBox_Lock.toggled.connect(lambda b: self.QuickOrder.position_takeprofit_info_update(self.data.Trade) if b else ...)
         self.toolButton_update_info.released.connect(lambda: [subscribe_price(p, 1) for p in self.data.sub_list])
         self.toolButton_update_info.released.connect(lambda: [func() for func in self.info_update])
+
+        self.pushButton_close_order.mouseReleaseEvent = lambda e:self._close_position(e)
 
     def update_pos_info(self, price_dict):  # 根据price来更新持仓盈亏等
         for t in range(self.tableWidget_pos.rowCount()):
@@ -416,7 +417,6 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         except Exception as e:
             QMessageBox.warning(self, 'WARING-失效', str(e))
 
-
     def __get_current_pos_info(self):
         row = self.tableWidget_pos.currentRow()
         if row >= 0:
@@ -428,13 +428,13 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         else:
             raise Exception('请选择需要平仓仓位')
 
-    def _close_position(self):
+    def _close_position(self, e):
         try:
             prodcode, net_pos = self.__get_current_pos_info()
             if net_pos > 0:
-                ClosePositionDialog('S', prodcode, net_pos, self)
+                ClosePositionDialog('S', prodcode, net_pos, 10, self) if e.button() == Qt.Qt.LeftButton else ClosePositionDialog('S', prodcode, net_pos, 10, self).close_position('S')
             elif net_pos < 0:
-                ClosePositionDialog('B', prodcode, -net_pos, self)
+                ClosePositionDialog('B', prodcode, -net_pos, 10, self) if e.button() == Qt.Qt.LeftButton else ClosePositionDialog('B', prodcode, -net_pos, 10, self).close_position('B')
             else:
                 raise Exception('净仓为0')
         except Exception as e:
@@ -752,7 +752,7 @@ class SpLoginDialog(QDialog, Ui_Dialog_sp_login):
             pickle.dump(self.login_info, f)
 
 class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):  # 平仓交互界面
-    def __init__(self, BuySell, ProdCode, Qty, parent=None):
+    def __init__(self, BuySell, ProdCode, Qty, toler, parent=None):
         QtWidgets.QDialog.__init__(self, parent)
         Ui_Dialog_close_position.__init__(self)
         self.setupUi(self)
@@ -760,7 +760,9 @@ class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):  # 平�
         self.pushButton_Short.setVisible(BuySell == 'S')
         self.lineEdit_ProdCode.setText(ProdCode)
         self.spinBox_Qty.setValue(Qty)
+        self.spinBox_toler.setValue(toler)
         self.init_signal()
+        self.setModal(True)
         self.show()
         self.sub_prodcode(ProdCode)
 
@@ -769,12 +771,15 @@ class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):  # 平�
         self.pushButton_Short.released.connect(lambda :self.close_position('S'))
 
     def sub_prodcode(self, prodcode):
-        if subscribe_price(prodcode, 1) != 0:
-            mb = QMessageBox()
-            mb.warning(self, f'WARING-订阅', f'订阅{prodcode}数据失败')
-            mb.accepted.connect(self.close)
-        else:
-            QMessageBox.information(self, f'INFO-订阅成功', f'订阅{prodcode}数据成功')
+        try:
+            price = get_price_by_code(prodcode)
+        except:
+            if subscribe_price(prodcode, 1) != 0:
+                mb = QMessageBox()
+                mb.warning(self, f'WARING-订阅', f'订阅{prodcode}数据失败')
+                mb.accepted.connect(self.close)
+            else:
+                QMessageBox.information(self, f'INFO-订阅成功', f'订阅{prodcode}数据成功')
 
     def close_position(self, BuySell):  # 平仓
         try:
@@ -840,15 +845,16 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):  # 快速下�
             comfirm_order.show()
             comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
 
-    def close_all_position(self):  # 一键平仓
+    def close_all_position(self, e):  # 一键平仓
         try:
             prodcode = self.lineEdit_ProdCode.text()
             pos = get_pos_by_product(prodcode)
             net_pos = (pos.Qty + pos.LongQty - pos.ShortQty) if pos.LongShort ==b'B' else (-pos.Qty + pos.LongQty - pos.ShortQty)
+            toler = self.spinBox_toler.value()
             if net_pos > 0:
-                ClosePositionDialog('S', prodcode, net_pos, parent=self)
+                ClosePositionDialog('S', prodcode, net_pos, toler, parent=self) if e.button() == Qt.Qt.LeftButton else ClosePositionDialog('S', prodcode, net_pos, toler, parent=self).close_position('S')
             elif net_pos < 0:
-                ClosePositionDialog('B', prodcode, -net_pos, parent=self)
+                ClosePositionDialog('B', prodcode, -net_pos, toler, parent=self) if e.button() == Qt.Qt.LeftButton else ClosePositionDialog('B', prodcode, -net_pos, toler, parent=self).close_position('B')
             else:
                 QMessageBox.warning(self, 'WARNING-平仓', f'{prodcode}没有仓位')
         except Exception as e:
@@ -862,7 +868,8 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):  # 快速下�
         self.pushButton_long.released.connect(lambda :self.addition_toler_order('B'))
         self.pushButton_short.released.connect(lambda: self.addition_toler_order('S'))
         self.checkBox_Lock.toggled.connect(lambda b: [subscribe_price(self.lineEdit_ProdCode.text(), 1),time.sleep(0.5), self.adjust_ui(25)] if b else ...)
-        self.pushButton_close_position.released.connect(self.close_all_position)
+        # self.pushButton_close_position.released.connect(self.close_all_position)
+        self.pushButton_close_position.mouseReleaseEvent = lambda e: self.close_all_position(e)
 
     def adjust_ui(self, n):  # 置中调整点击下单table
         try:
@@ -957,11 +964,15 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):  # 快速下�
             self.tableWidget_Price.viewport().update()
 
     def price_info_update(self, price_dict):  # 根据推送的price来计算追价情况
-        bid = price_dict['Bid'][0]
-        ask = price_dict['Ask'][0]
-        toler = self.spinBox_toler.value()
-        self.label_long_info.setText(f'@{bid}->{bid + toler}')
-        self.label_short_info.setText(f'@{ask}->{ask - toler}')
+        prodcode = price_dict['ProdCode'].decode()
+        if prodcode == self.lineEdit_ProdCode.text():
+            bid = price_dict['Bid'][0]
+            ask = price_dict['Ask'][0]
+            toler = self.spinBox_toler.value()
+            self.pushButton_long.setText(f'追价买入\n@{bid}->{bid + toler}')
+            self.pushButton_short.setText(f'追价沽出\n@{ask}->{ask - toler}')
+            # self.label_long_info.setText(f'@{bid}->{bid + toler}')
+            # self.label_short_info.setText(f'@{ask}->{ask - toler}')
 
     def position_takeprofit_info_update(self, trades_info):
         # trades = get_all_trades_by_array()
@@ -1092,6 +1103,9 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
 
         self.pushButton_tp_pos_by_pos.released.connect(self.tp_pos_by_pos)
         self.pushButton_sl_pos_by_pos.released.connect(self.sl_pos_by_pos)
+
+        self.pushButton_tp_by_amount.released.connect(self.tp_by_amount)
+        self.pushButton_sl_by_amount.released.connect(self.sl_by_amount)
 
         self.close_position_trigger_sig.connect(lambda :QMessageBox.information(self, '<INFO>-追踪止损', '平仓信号触发'))
 
@@ -1361,8 +1375,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             self.sl = (net_amt + self.spinBox_stoploss_amount.value() / p['leverage']) / self.net_qty if self.net_qty != 0 else 0
             self.lineEdit_takeprofit_price.setText(f'{self.net_qty}@{self.tp:.2f}')
             self.lineEdit_stoploss_price.setText(f'{self.net_qty}@{self.sl:.2f}')
-        else:
-            QMessageBox.warning(self, 'WARING-计算', f'合约{prodcode}未有任何持仓')
+
 
     def oco_close_position(self):  # 双向限价平仓
         prodcode = self.lineEdit_ProdCode.text()
@@ -1373,6 +1386,56 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             self.oco_close_sig.emit(prodcode, net_qty, tp, sl)
         else:
             QMessageBox.warning(self, 'WARING-双向限价平仓', f'合约{prodcode}未有任何持仓，无法下平仓指令')
+
+    def tp_by_amount(self):
+        prodcode = self.lineEdit_ProdCode.text()
+        net_qty = getattr(self, 'net_qty', 0)
+        tp = round(getattr(self, 'tp', 0))
+        if prodcode != self.last_price.get('ProdCode', b'').decode():
+            QMessageBox.critical(self, 'CRITICAL-止盈', '请检查合约代码')
+            return
+
+        if net_qty > 0:
+            if tp <= self.last_price['Last'][0]:
+                QMessageBox.warning(self, 'WARING-止盈', '止盈价需高于现价')
+            else:
+                add_order(ProdCode=prodcode, BuySell='S', OrderOptions=0,
+                          Qty=int(net_qty), ValidType=0, CondType=0, OrderType=0, Price=tp,
+                          Ref='tp_by_amount')
+        elif net_qty < 0:
+            if tp >= self.last_price['Last'][0]:
+                QMessageBox.warning(self, 'WARING-止盈', '止盈价需低于现价')
+            else:
+                add_order(ProdCode=prodcode, BuySell='B', OrderOptions=0,
+                          Qty=int(-net_qty), ValidType=0, CondType=0, OrderType=0, Price=tp,
+                          Ref='tp_by_amount')
+
+
+    def sl_by_amount(self):
+        prodcode = self.lineEdit_ProdCode.text()
+        net_qty = getattr(self, 'net_qty', 0)
+        sl = round(getattr(self, 'sl', 0))
+
+        if prodcode != self.last_price.get('ProdCode', b'').decode():
+            QMessageBox.critical(self, 'CRITICAL-止损', '请检查合约代码')
+            return
+
+        if net_qty > 0:
+            if sl >= self.last_price['Last'][0]:
+                QMessageBox.warning(self, 'WARING-止损', '止损价需低于现价')
+            else:
+                add_order(ProdCode=prodcode, BuySell='S', OrderOptions=0,
+                          Qty=int(net_qty), ValidType=0, CondType=1, OrderType=0, Price=sl - self.spinBox_stoploss_toler.value(),
+                          StopType='L', StopLevel=sl,
+                          Ref='sl_by_amount')
+        elif net_qty < 0:
+            if sl <= self.last_price['Last'][0]:
+                QMessageBox.warning(self, 'WARING-止损', '止损价需高于现价')
+            else:
+                add_order(ProdCode=prodcode, BuySell='B', OrderOptions=0,
+                          Qty=int(-net_qty), ValidType=0, CondType=1, OrderType=0, Price=sl + self.spinBox_stoploss_toler.value(),
+                          StopType='L', StopLevel=sl,
+                          Ref='sl_by_amount')
 
 
 class ComfirmDialog(QtWidgets.QDialog, Ui_Dialog_order_comfirm):  # 下单的二次确认
@@ -1408,9 +1471,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.order_sub = QSubOrder(self.order_pub.order_queue, self)  # 跟单订单处理类
         self.Login = SpLoginDialog(self)  # 登录界面
         self.AccInfo = AccInfoWidget(self)  # 账户信息界面类
-        self.Order = OrderDialog(self)
-        self.QuickOrder = QuickOrderDialog(self)
-        self.OrderAssistant = OrderAssistantWidget(self)
+        self.Order = OrderDialog(self)  # 普通下单界面
+        self.QuickOrder = QuickOrderDialog(self)  # 快速下单界面
+        self.OrderAssistant = OrderAssistantWidget(self)  # 辅助下单界面
         self.update_thread = Thread(target=self.info_handler)  # 回调信息的处理进程
         self.update_thread.start()
         self.init_signal()
