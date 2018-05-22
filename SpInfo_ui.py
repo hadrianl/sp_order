@@ -85,7 +85,7 @@ class OrderDialog(QDialog, Ui_Dialog_order):
         self.init_signal()
 
     def init_state(self):
-        self.setWindowFlags(Qt.Qt.Window| Qt.Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.Qt.Window)
         self.dateEdit_ValidTime.setDate(dt.datetime.now().date())
         self.dateTimeEdit_sched_time.setDateTime(dt.datetime.now())
         self.spinBox_market_level.setDisabled(True)
@@ -292,7 +292,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.setupUi(self)
         desktop = QDesktopWidget()
         self.move(desktop.width() - self.width(), (desktop.height() + self.height()) / 2)
-        self.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.Qt.Window)
         self.time = TimeWidget(self)
         self.message = QMessageBox(self)
         self.message.setModal(True)
@@ -811,7 +811,6 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):  # 快速下�
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Dialog_quick_order.__init__(self)
         self.setupUi(self)
-        self.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)
         self.tableWidget_Price.setColumnWidth(0, 30)
         self.tableWidget_Price.setColumnWidth(3, 30)
         self.tableWidget_Price.setColumnWidth(4, 70)
@@ -826,6 +825,7 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):  # 快速下�
         self.holding_pos = (0, 0)
         self.init_signal()
         self._price_active = False
+        self.setWindowFlags(Qt.Qt.Window)
 
     def order(self, BuySell, Price):
         try:
@@ -1068,12 +1068,12 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_OrderAssistant.__init__(self)
         self.setupUi(self)
-        self.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)
         self.holding_qty = 0
         self.holding_pos_amt = 0
         self.trailing_best_price = None
         self.last_price = {}
         self.init_signal()
+        self.setWindowFlags(Qt.Qt.Window)
 
     def init_signal(self):
         AccInfo = self.parent().AccInfo
@@ -1476,15 +1476,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.OrderAssistant = OrderAssistantWidget(self)  # 辅助下单界面
         self.update_thread = Thread(target=self.info_handler)  # 回调信息的处理进程
         self.update_thread.start()
+        self.trayicon = QTrayIcon(self)
         self.init_signal()
         self.init_callback()  # 初始化回调函数
-        # self.setWindowFlags(Qt.Qt.Desktop)
+        # self.setWindowFlags(Qt.Qt.WindowStaysOnBottomHint)
 
     def init_signal(self):
         self.info_sig.connect(self.popup)  # inof_sig连接消息的popup
-        self.login_sig.connect(self.showMaximized)
+        self.login_sig.connect(self.showMinimized)
         self.login_sig.connect(self.AccInfo.show)
         self.login_sig.connect(lambda: self.Login.close())
+        self.login_sig.connect(self.trayicon.show)
         self.AccInfo.checkBox_follow_orders.toggled.connect(
             lambda b: self.init_order_follower() if b else self.deinit_order_follower())  # 绑定跟单的checkbox可以初始化与反初始化跟单
         self.login_sig.connect(lambda: [self.AccInfo.refresh_accbals(), self.AccInfo.refresh_ccy_rate()])  # 登录时更新结余和汇率
@@ -1503,15 +1505,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.AccInfo.price_update_sig.connect(self.QuickOrder.holding_profit)
         self.AccInfo.pushButton_Order.toggled.connect(self.Order.setVisible)
         self.AccInfo.pushButton_QuickOrder.toggled.connect(self.QuickOrder.setVisible)
+        self.AccInfo.pushButton_OrderAssistant.toggled.connect(self.OrderAssistant.setVisible)
         self.Order.lineEdit_ProdCode.textChanged.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))  # 普通下单与快速下单的代码输入绑定
         self.QuickOrder.lineEdit_ProdCode.textChanged.connect(lambda text: self.Order.lineEdit_ProdCode.setText(text))  # 普通下单与快速下单的代码输入绑定
         self.Order.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)  # 普通下单与快速下单的代码输入绑定
         self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)  # 普通下单与快速下单的代码输入绑定
-        self.AccInfo.pushButton_OrderAssistant.toggled.connect(self.OrderAssistant.setVisible)
         self.AccInfo.pos_info_sig.connect(self.OrderAssistant.calc_amount_base)
         self.OrderAssistant.oco_close_sig.connect(self.Order.oco_close)
         self.QuickOrder.checkBox_Lock.toggled.connect(
             lambda b: self.QuickOrder.position_takeprofit_info_update(self.AccInfo.data.Trade) if b else ...)
+
+        self.trayicon.action_accinfo.toggled.connect(lambda b: [self.AccInfo.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint), self.AccInfo.show()] if b else [self.AccInfo.setWindowFlags(Qt.Qt.Window), self.AccInfo.hide()])
+        self.trayicon.action_order.toggled.connect(lambda b: self.Order.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)if b else self.Order.setWindowFlags(Qt.Qt.Window))
+        self.trayicon.action_quickorder.toggled.connect(lambda b: self.QuickOrder.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint) if b else self.QuickOrder.setWindowFlags(Qt.Qt.Window))
+        self.trayicon.action_orderassist.toggled.connect(lambda b: self.OrderAssistant.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint) if b else self.OrderAssistant.setWindowFlags(Qt.Qt.Window))
+        self.trayicon.action_order.toggled.connect(self.AccInfo.pushButton_Order.setChecked)
+        self.trayicon.action_quickorder.toggled.connect(self.AccInfo.pushButton_QuickOrder.setChecked)
+        self.trayicon.action_orderassist.toggled.connect(self.AccInfo.pushButton_OrderAssistant.setChecked)
 
     def bind_account(self, account_id):
         self.Order.comboBox_account.addItem(account_id)
@@ -1780,6 +1790,39 @@ class TimeWidget(QtWidgets.QWidget, Ui_Form_time):
             self._isTracking = False
             self._startPos = None
             self._endPos = None
+
+
+class QTrayIcon(QtWidgets.QSystemTrayIcon):
+    def __init__(self, parent=None):
+        QtWidgets.QSystemTrayIcon.__init__(self, parent)
+        self.init_Menu()
+        self.init_icon()
+        self.init_signal()
+        self.setVisible(False)
+
+    def init_Menu(self):
+        self.menu = QtWidgets.QMenu()
+        self.menu_suspen = QtWidgets.QMenu()
+        self.menu_suspen.setTitle('悬浮置顶')
+        self.action_accinfo = QtWidgets.QAction('账户', self, checkable=True)
+        self.action_order = QtWidgets.QAction('下单', self, checkable=True)
+        self.action_quickorder = QtWidgets.QAction('点击下单', self, checkable=True)
+        self.action_orderassist = QtWidgets.QAction('辅助下单', self, checkable=True)
+        self.action_quit = QtWidgets.QAction("退出", self)
+        self.menu_suspen.addAction(self.action_accinfo)
+        self.menu_suspen.addAction(self.action_order)
+        self.menu_suspen.addAction(self.action_quickorder)
+        self.menu_suspen.addAction(self.action_orderassist)
+        self.menu.addMenu(self.menu_suspen)
+        self.menu.addAction(self.action_quit)
+        self.setContextMenu(self.menu)
+
+    def init_icon(self):
+        self.setIcon(QIcon(os.path.join('ui', 'trayicon.png')))
+        self.icon = self.MessageIcon()
+
+    def init_signal(self):
+        self.action_quit.triggered.connect(lambda :self.parent().close())
 
 
 if __name__ == '__main__':
