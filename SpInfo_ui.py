@@ -1073,6 +1073,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         # self.parent().pos_info_sig.connect(lambda p:self.update_holding_pos())
         self.lineEdit_ProdCode.editingFinished.connect(self.update_holding_pos_LIFO)
         AccInfo.pos_info_sig.connect(lambda p:self.update_holding_pos_LIFO())
+
         self.checkBox_trailing_stop.toggled.connect(lambda b: AccInfo.price_update_sig.connect(self.update_trailing_stop) if b else AccInfo.price_update_sig.disconnect(self.update_trailing_stop))
         AccInfo.price_update_sig.connect(lambda p: self.lineEdit_price.setText(str(p['Last'][0])) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
         AccInfo.price_update_sig.connect(lambda p: setattr(self, 'last_price', p) if p['ProdCode'].decode() == self.lineEdit_ProdCode.text() else ...)
@@ -1080,13 +1081,19 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         AccInfo.order_info_sig.connect(lambda o: self.checkBox_auto_tp.setChecked(True) if o['ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 1 and o['Ref'].decode() =='auto_tp' else ...)
         AccInfo.order_info_sig.connect(lambda o: self.checkBox_auto_tp.setChecked(False) if o[ 'ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 10 and o['Ref'].decode() == 'auto_tp' else ...)
         self.checkBox_auto_tp.clicked.connect(lambda b: self.init_auto_takeprofit() if b else self.deinit_auto_takeprofit())
+        self.pushButton_tp.released.connect(lambda :self.init_auto_takeprofit())
+
         AccInfo.order_info_sig.connect(lambda o: self.checkBox_auto_sl.setChecked(True) if o['ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 1 and o['Ref'].decode() =='auto_sl' else ...)
         AccInfo.order_info_sig.connect(lambda o: self.checkBox_auto_sl.setChecked(False) if o[ 'ProdCode'].decode() == self.lineEdit_ProdCode.text() and o['Status'] == 10 and o['Ref'].decode() == 'auto_sl' else ...)
         self.checkBox_auto_sl.clicked.connect(lambda b: self.init_auto_stoploss() if b else self.deinit_auto_stoploss())
+        self.pushButton_sl.released.connect(lambda :self.init_auto_stoploss())
+
         self.lineEdit_ProdCode.editingFinished.connect(lambda :self.init_auto_tp_sl())
 
         self.pushButton_tp_pos_by_pos.released.connect(self.tp_pos_by_pos)
         self.pushButton_sl_pos_by_pos.released.connect(self.sl_pos_by_pos)
+
+        self.close_position_trigger_sig.connect(lambda :QMessageBox.information(self, '<INFO>-追踪止损', '平仓信号触发'))
 
     def init_auto_tp_sl(self):  # 产品代码输出后， 初始化原来的止损止盈情况
         try:
@@ -1107,20 +1114,20 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         if self.lineEdit_ProdCode.text() != self.last_price.get('ProdCode', b'').decode():
             QMessageBox.critical(self, 'CRITICAL-自动止盈', '请检查合约代码')
             return
-        price = self.spinBox_tp_price.value()
+        tp = self.spinBox_tp_price.value()
         if self.holding_qty > 0:
-            if price <= self.last_price['Last'][0]:
+            if tp <= self.last_price['Last'][0]:
                 QMessageBox.warning(self, 'WARING-自动止盈', '止盈价需高于现价')
             else:
                 add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='S', OrderOptions=0,
-                          Qty=int(self.holding_qty), ValidType=0, CondType=0, OrderType=0, Price=price,
+                          Qty=int(self.holding_qty), ValidType=0, CondType=0, OrderType=0, Price=tp,
                           Ref='auto_tp')
         elif self.holding_qty < 0:
-            if price >= self.last_price['Last'][0]:
+            if tp >= self.last_price['Last'][0]:
                 QMessageBox.warning(self, 'WARING-自动止盈', '止盈价需低于现价')
             else:
                 add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='B', OrderOptions=0,
-                          Qty=int(-self.holding_qty), ValidType=0, CondType=0, OrderType=0, Price=price,
+                          Qty=int(-self.holding_qty), ValidType=0, CondType=0, OrderType=0, Price=tp,
                           Ref='auto_tp')
 
     def deinit_auto_takeprofit(self):  # 取消自动止盈
@@ -1136,22 +1143,22 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         if self.lineEdit_ProdCode.text() != self.last_price.get('ProdCode', b'').decode():
             QMessageBox.critical(self, 'CRITICAL-自动止损', '请检查合约代码')
             return
-        price = self.spinBox_sl_price.value()
+        sl = self.spinBox_sl_price.value()
         if self.holding_qty > 0:
-            if price >= self.last_price['Last'][0]:
+            if sl >= self.last_price['Last'][0]:
                 QMessageBox.warning(self, 'WARING-自动止损', '止损价需低于现价')
             else:
                 add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='S', OrderOptions=0,
-                          Qty=int(self.holding_qty), ValidType=0, CondType=1, OrderType=0, Price=price,
-                          StopType='L', StopLevel=price - self.spinBox_stoploss_toler.value(),
+                          Qty=int(self.holding_qty), ValidType=0, CondType=1, OrderType=0, Price=sl - self.spinBox_stoploss_toler.value(),
+                          StopType='L', StopLevel=sl,
                           Ref='auto_sl')
         elif self.holding_qty < 0:
-            if price <= self.last_price['Last'][0]:
+            if sl <= self.last_price['Last'][0]:
                 QMessageBox.warning(self, 'WARING-自动止损', '止损价需高于现价')
             else:
                 add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='B', OrderOptions=0,
-                          Qty=int(-self.holding_qty), ValidType=0, CondType=1, OrderType=0, Price=price,
-                          StopType='L', StopLevel=price + self.spinBox_stoploss_toler.value(),
+                          Qty=int(-self.holding_qty), ValidType=0, CondType=1, OrderType=0, Price=sl + self.spinBox_stoploss_toler.value(),
+                          StopType='L', StopLevel=sl,
                           Ref='auto_sl')
 
     def deinit_auto_stoploss(self):  # 取消自动止损
@@ -1173,7 +1180,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             self.holding_pos_amt = amt + today_net_pos_amt
             self.holding_qty = qty + today_net_pos
             holding_price = self.holding_pos_amt / self.holding_qty if self.holding_qty != 0 else self.holding_pos_amt
-            print(holding_price)
             self.lineEdit_holding_qty.setText(str(self.holding_qty))
             self.lineEdit_holding_price.setText(f'{holding_price:.2f}')
         else:
@@ -1204,7 +1210,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             self.trailing_best_price = max(self.trailing_best_price, price['Last'][0]) if self.trailing_best_price != None else price['Last'][0]
             self.trailing_close_price = self.trailing_best_price - toler
             if self.trailing_close_price >= price['Last'][0]:
-                self.close_position_trigger_sig.emit()
+                self.close_position_trigger_sig.emit()  # 触发平仓信号
                 self.checkBox_trailing_stop.setChecked(False)
                 self.trailing_best_price = None
                 self.lineEdit_best_price.setText('-')
@@ -1220,7 +1226,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             self.trailing_close_price = self.trailing_best_price + toler
             self.horizontalSlider_toler.setValue(int(price['Last'][0]))
             if self.trailing_close_price <= price['Last'][0]:
-                self.close_position_trigger_sig.emit()
+                self.close_position_trigger_sig.emit()  # 触发平仓信号
                 self.checkBox_trailing_stop.setChecked(False)
                 self.trailing_best_price = None
                 self.lineEdit_best_price.setText('-')
@@ -1285,7 +1291,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             QMessageBox.critical(self, 'CRITICAL-逐仓止损错误', '请检查合约代码')
             return
 
-        if self.spinBox_lock_pos.value() >= holding_qty:
+        if self.spinBox_lock_pos.value() >= abs(holding_qty):
             QMessageBox.warning(self, 'WARING-锁仓错误', f'目前持仓只有{holding_qty}')
             return
 
@@ -1295,17 +1301,19 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             tp_close_pos = holding_pos[:tp_close_qty]
             for p in tp_close_pos:
                 add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='S', OrderOptions=0,
-                          Qty=1, ValidType=0, CondType=1, OrderType=0, Price=p - self.spinBox_sl_addition.value() - self.spinBox_stoploss_toler.value(),
-                          StopType='L', StopLevel=p - self.spinBox_stoploss_toler.value(),
+                          Qty=1, ValidType=0, CondType=1, OrderType=0, Price=p - self.spinBox_sl_addition.value() - self.spinBox_sl_addition_toler.value(),
+                          StopType='L', StopLevel=p - self.spinBox_sl_addition.value(),
                           Ref='sl_pos_by_pos')
         elif holding_qty < 0:
             tp_close_qty = -holding_qty - self.spinBox_lock_pos.value()
-            tp_close_pos = holding_pos.reverse()[:tp_close_qty]
+            holding_pos.reverse()
+            tp_close_pos = holding_pos[:tp_close_qty]
             for p in tp_close_pos:
                 add_order(ProdCode=self.lineEdit_ProdCode.text(), BuySell='B', OrderOptions=0,
-                          Qty=1, ValidType=0, CondType=1, OrderType=0, Price=p + self.spinBox_sl_addition.value() + self.spinBox_stoploss_toler.value(),
-                          StopType='L', StopLevel=p + self.spinBox_stoploss_toler.value(),
+                          Qty=1, ValidType=0, CondType=1, OrderType=0, Price=p + self.spinBox_sl_addition.value() + self.spinBox_sl_addition_toler.value(),
+                          StopType='L', StopLevel=p + self.spinBox_sl_addition.value(),
                           Ref='sl_pos_by_pos')
+
         else:
             QMessageBox.warning(self, 'WARING-逐仓止损', '无持仓')
 
