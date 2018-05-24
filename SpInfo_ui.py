@@ -28,6 +28,7 @@ from functools import reduce
 from operator import add
 from queue import Queue
 from threading import Thread
+import pymysql as pm
 
 class QSqlTable(QtWidgets.QTableView):
     class QDataModel(QtSql.QSqlTableModel):
@@ -765,14 +766,44 @@ class ClosePositionDialog(QtWidgets.QDialog, Ui_Dialog_close_position):  # 平�
         self.setModal(True)
         self.show()
         self.sub_prodcode(ProdCode)
+        self.prodcode = ProdCode
+        self.BuySell = BuySell
 
     def init_signal(self):
         self.pushButton_Long.released.connect(lambda :self.close_position('B'))
         self.pushButton_Short.released.connect(lambda :self.close_position('S'))
+        self.checkBox_MarketOrder.toggled.connect(self.set_price)
+        self.spinBox_Price.valueChanged.connect(self.update_price)
+
+    def set_price(self, b):
+        if b:
+            self.spinBox_Price.setValue(0)
+        else:
+            self.price = get_price_by_code(self.prodcode)
+            self.spinBox_Price.setValue(int(self.price.Ask[0]) if self.BuySell == 'B' else int(self.price.Bid[0]))
+
+    def update_price(self, p):
+        new_price = get_price_by_code(self.prodcode)
+        if p == 0:
+            return
+        if self.BuySell == 'B':
+            o_ask = p
+            n_ask = int(new_price.Ask[0])
+            if n_ask > o_ask:
+                self.spinBox_Price.setValue(n_ask)
+            else:
+                self.price = new_price
+        else:
+            o_bid = p
+            n_bid = int(new_price.Bid[0])
+            if n_bid < o_bid:
+                self.spinBox_Price.setValue(n_bid)
+            else:
+                self.price = new_price
 
     def sub_prodcode(self, prodcode):
         try:
-            price = get_price_by_code(prodcode)
+            self.price = get_price_by_code(prodcode)
         except:
             if subscribe_price(prodcode, 1) != 0:
                 mb = QMessageBox()
@@ -1073,7 +1104,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         self.trailing_best_price = None
         self.last_price = {}
         self.init_signal()
-        self.setWindowFlags(Qt.Qt.Window)
+        self.setWindowFlags(Qt.Qt.FramelessWindowHint | Qt.Qt.Window)
 
     def init_signal(self):
         AccInfo = self.parent().AccInfo
@@ -1108,6 +1139,51 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         self.pushButton_sl_by_amount.released.connect(self.sl_by_amount)
 
         self.close_position_trigger_sig.connect(lambda :QMessageBox.information(self, '<INFO>-追踪止损', '平仓信号触发'))
+
+        self.spinBox_tp_price.valueChanged.connect(self.tp_price_update)
+        self.spinBox_sl_price.valueChanged.connect(self.sl_price_update)
+
+    def tp_price_update(self, p):
+        prodcode = self.lineEdit_ProdCode.text()
+        try:
+            new_price = get_price_by_code(prodcode)
+        except Exception as e:
+            QMessageBox.warning(self, '<WARING>-止盈', str(e))
+            return
+
+        if not new_price.Last[0] * 0.9 < p < new_price.Last[0] * 1.1:
+            self.spinBox_tp_price.setValue(int(new_price.Last[0]))
+            return
+
+        if self.holding_qty > 0:
+            n_bid = new_price.Bid[0]
+            if n_bid > p:
+                self.spinBox_tp_price.setValue(n_bid)
+        elif self.holding_qty < 0:
+            n_ask = new_price.Ask[0]
+            if n_ask < p:
+                self.spinBox_tp_price.setValue(n_ask)
+
+    def sl_price_update(self, p):
+        prodcode = self.lineEdit_ProdCode.text()
+        try:
+            new_price = get_price_by_code(prodcode)
+        except Exception as e:
+            QMessageBox.warning(self, '<WARING>-止损', str(e))
+            return
+
+        if not new_price.Last[0] * 0.9 < p < new_price.Last[0] * 1.1:
+            self.spinBox_sl_price.setValue(int(new_price.Last[0]))
+            return
+
+        if self.holding_qty > 0:
+            n_bid = new_price.Bid[0]
+            if n_bid < p:
+                self.spinBox_sl_price.setValue(n_bid)
+        elif self.holding_qty < 0:
+            n_ask = new_price.Ask[0]
+            if n_ask > p:
+                self.spinBox_sl_price.setValue(n_ask)
 
     def init_auto_tp_sl(self):  # 产品代码输出后， 初始化原来的止损止盈情况
         try:
@@ -1477,6 +1553,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update_thread = Thread(target=self.info_handler)  # 回调信息的处理进程
         self.update_thread.start()
         self.trayicon = QTrayIcon(self)
+        self.var_test = QTest(self)
         self.init_signal()
         self.init_callback()  # 初始化回调函数
         # self.setWindowFlags(Qt.Qt.WindowStaysOnBottomHint)
@@ -1505,7 +1582,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.AccInfo.price_update_sig.connect(self.QuickOrder.holding_profit)
         self.AccInfo.pushButton_Order.toggled.connect(self.Order.setVisible)
         self.AccInfo.pushButton_QuickOrder.toggled.connect(self.QuickOrder.setVisible)
-        self.AccInfo.pushButton_OrderAssistant.toggled.connect(self.OrderAssistant.setVisible)
         self.Order.lineEdit_ProdCode.textChanged.connect(lambda text: self.QuickOrder.lineEdit_ProdCode.setText(text))  # 普通下单与快速下单的代码输入绑定
         self.QuickOrder.lineEdit_ProdCode.textChanged.connect(lambda text: self.Order.lineEdit_ProdCode.setText(text))  # 普通下单与快速下单的代码输入绑定
         self.Order.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)  # 普通下单与快速下单的代码输入绑定
@@ -1518,10 +1594,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.trayicon.action_accinfo.toggled.connect(lambda b: [self.AccInfo.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint), self.AccInfo.show()] if b else [self.AccInfo.setWindowFlags(Qt.Qt.Window), self.AccInfo.hide()])
         self.trayicon.action_order.toggled.connect(lambda b: self.Order.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)if b else self.Order.setWindowFlags(Qt.Qt.Window))
         self.trayicon.action_quickorder.toggled.connect(lambda b: self.QuickOrder.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint) if b else self.QuickOrder.setWindowFlags(Qt.Qt.Window))
-        self.trayicon.action_orderassist.toggled.connect(lambda b: self.OrderAssistant.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint) if b else self.OrderAssistant.setWindowFlags(Qt.Qt.Window))
         self.trayicon.action_order.toggled.connect(self.AccInfo.pushButton_Order.setChecked)
         self.trayicon.action_quickorder.toggled.connect(self.AccInfo.pushButton_QuickOrder.setChecked)
-        self.trayicon.action_orderassist.toggled.connect(self.AccInfo.pushButton_OrderAssistant.setChecked)
+
+        self.Order.checkBox_order_assistant.toggled.connect(self.OrderAssistant.setVisible)
+        self.Order.moveEvent = lambda a0: self.OrderAssistant.move(a0.pos().x() + self.Order.width(), a0.pos().y())
+
+        self.AccInfo.checkBox_test.toggled.connect(lambda b: [self.var_test.open(), self.timer.timeout.connect(self.var_test.start), self.timer.start(3000)] if b else [self.timer.timeout.disconnect(self.var_test.start), self.timer.stop(), self.var_test.close()])
+
 
     def bind_account(self, account_id):
         self.Order.comboBox_account.addItem(account_id)
@@ -1807,12 +1887,10 @@ class QTrayIcon(QtWidgets.QSystemTrayIcon):
         self.action_accinfo = QtWidgets.QAction('账户', self, checkable=True)
         self.action_order = QtWidgets.QAction('下单', self, checkable=True)
         self.action_quickorder = QtWidgets.QAction('点击下单', self, checkable=True)
-        self.action_orderassist = QtWidgets.QAction('辅助下单', self, checkable=True)
         self.action_quit = QtWidgets.QAction("退出", self)
         self.menu_suspen.addAction(self.action_accinfo)
         self.menu_suspen.addAction(self.action_order)
         self.menu_suspen.addAction(self.action_quickorder)
-        self.menu_suspen.addAction(self.action_orderassist)
         self.menu.addMenu(self.menu_suspen)
         self.menu.addAction(self.action_quit)
         self.setContextMenu(self.menu)
@@ -1823,6 +1901,29 @@ class QTrayIcon(QtWidgets.QSystemTrayIcon):
 
     def init_signal(self):
         self.action_quit.triggered.connect(lambda :self.parent().close())
+
+
+class QTest(QtCore.QThread):
+    def __init__(self, parent=None):
+        QtCore.QThread.__init__(self, parent)
+
+    def run(self):
+        try:
+            H_price = get_price_by_code('HSIK8')
+            M_pirce = get_price_by_code('MHIK8')
+            sql = f'insert into var_testing values("{str(dt.datetime.now())[:19]}", {H_price.Ask[0]}, {H_price.Bid[0]}, {H_price.Last[0]}, {M_pirce.Ask[0]}, {M_pirce.Bid[0]}, {M_pirce.Last[0]})'
+            self.cursor.execute(sql)
+            self.conn.commit()
+        except Exception as e:
+            print(e)
+
+    def close(self):
+        self.cursor.close()
+        self.conn.close()
+
+    def open(self):
+        self.conn = pm.connect(host='127.0.0.1', port=3306, user='hadrianl', passwd='kairuitouzi', db='carry_investment')
+        self.cursor = self.conn.cursor()
 
 
 if __name__ == '__main__':
