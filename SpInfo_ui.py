@@ -614,12 +614,12 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
 
     def _refresh_trade(self, t):
         self.data._update_trade(t)
-        trade_dict = self.data.Trade[t.IntOrderNo]
+        trade_dict = self.data.Trade[t.RecNO]
         if self.parent().QuickOrder.checkBox_Lock.isChecked():
             self.parent().QuickOrder.position_takeprofit_info_update(self.data.Trade)
         r = 0
         for i in range(self.tableWidget_trades.rowCount()):
-            if trade_dict['IntOrderNo'] == int(self.tableWidget_trades.item(i, 11).text()):
+            if trade_dict['RecNO'] == int(self.tableWidget_trades.item(i, 13).text()):
                 r = i
                 break
         else:
@@ -1331,6 +1331,7 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
     def _get_holding_pos(self, trades_info):  # 获取持仓
         prodcode = self.lineEdit_ProdCode.text()
         current_trades = [trade for Id, trade in trades_info.items() if trade['ProdCode'].decode('GBK') == prodcode]
+        print(current_trades)
         if 'HSI' in prodcode:
             leverage = 50
         elif 'MHI' in prodcode:
@@ -1340,19 +1341,15 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
 
         pos = get_pos_by_product(prodcode)
         pre_pos = pos.Qty
-        print(pre_pos)
         pre_pos_price = pos.TotalAmt  / pre_pos if pre_pos !=0 else 0
-        print(pre_pos_price)
             # .sort(key=lambda x:x['IntOrderNo'])
         self.trade_long_queue = []
         self.trade_short_queue = []
 
         if pos.LongShort == b'B':
             self.trade_long_queue.extend([pre_pos_price] * pre_pos)
-            print(self.trade_long_queue)
         elif pos.LongShort == b'S':
             self.trade_short_queue.extend([pre_pos_price] * pre_pos)
-            print(self.trade_short_queue)
 
         for t in current_trades:
             current_trade = [t['AvgPrice']] * t['Qty']
@@ -1365,7 +1362,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
         long_qty = len(self.trade_long_queue)
         short_qty = len(self.trade_short_queue)
         holding_qty = long_qty - short_qty
-        print(holding_qty, long_qty, short_qty)
 
         if holding_qty > 0:
             holding_pos = self.trade_long_queue[:holding_qty]
@@ -1373,7 +1369,6 @@ class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
             holding_pos = self.trade_short_queue[:-holding_qty]
         else:
             holding_pos = []
-        print(holding_pos)
 
         return holding_qty, holding_pos
 

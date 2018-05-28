@@ -323,7 +323,7 @@ class QData(QObject):
         for name, c_type in t._fields_:
             trade_dict[name] = getattr(t, name)
 
-        self.Trade.update({trade_dict['IntOrderNo']: trade_dict})
+        self.Trade.update({trade_dict['RecNO']: trade_dict})
 
     def _update_bal(self, b):
         accbal_dict = {}
