@@ -29,10 +29,11 @@ from operator import add
 from queue import Queue
 from threading import Thread
 import pymysql as pm
+from extra.calc import HS
 
 class QSqlTable(QtWidgets.QTableView):
     class QDataModel(QtSql.QSqlTableModel):
-        def __init(self, parent=None, db=None):
+        def __init__(self, parent=None, db=None):
             QtSql.QSqlTableModel.__init__(self, parent, db)
 
         def data(self, index: QtCore.QModelIndex, role: int = ...):
@@ -1570,6 +1571,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.login_sig.connect(
             lambda: self.timer.singleShot(3000, lambda: [subscribe_price(p, 1) for p in self.AccInfo.data.sub_list]))  # 登录3秒后会自动订阅sublist的价格，sublist通过持仓的回调函数添加产品代码
         self.AccInfo.pushButton_test.released.connect(self.init_sql_table)  # 按钮test的测试
+        self.AccInfo.pushButton_tradesession.released.connect(self.init_tradesession_table)  # 交易会话
         self.AccInfo.checkBox_wechat_info.clicked.connect(
             lambda b: self.init_wechat_info() if b else self.deinit_wechat_info())  # 微信消息推送的初始化与反初始化
         self.wechat_info.login_sig.connect(self.AccInfo.checkBox_wechat_info.setChecked)  # 微信登入信号为checkbox设置checked
@@ -1666,8 +1668,16 @@ class MainWindow(QtWidgets.QMainWindow):
     def init_sql_table(self):
         try:
             self.sql_table = QSqlTable('order_detail')
+            self.sql_table = QTradeSession()
         except Exception as e:
             QMessageBox.critical(self, 'CRITICAL-SQLTable初始化', f'错误:{e}')
+
+    def init_tradesession_table(self):
+        try:
+            self.sql_table = QTradeSession()
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-TradeSession初始化', f'错误:{e}')
+            raise e
 
     def info_handle(self, type, info, handle_type=0, handler=None, *args, **kwargs):  # 把回调的消息放进消息队列
         if handle_type == 0:
@@ -1926,9 +1936,39 @@ class QTest(QtCore.QThread):
         self.cursor = self.conn.cursor()
 
 
+class QTradeSession(QTableWidget):
+    def __init__(self, parent=None):
+        QTableWidget.__init__(self, parent)
+        self.setWindowTitle('TradeSession')
+        self.verticalHeader().setHidden(True)
+        self.HS = HS()
+        self.recalc()
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.resize(500, 800)
+        self.show()
+
+    def recalc(self):
+        raw_data = self.HS.get_data()
+        data = self.HS.ray(raw_data)
+        self.clear()
+        columns = data.columns
+        index = data.index
+        self.setColumnCount(len(columns))
+        self.setRowCount(len(index))
+        for c in range(len(columns)):
+            self.setHorizontalHeaderItem(c, QTableWidgetItem(columns[c]))
+            for i in range(len(index)):
+                self.setItem(i, c, QTableWidgetItem(str(data.iat[i, c])))
+
+
+
+
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     od = OrderDialog()
     od.show()
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         sys.exit(app.exec())
+
+    import pandas as pd
+    a = pd.DataFrame()
