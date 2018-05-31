@@ -7,9 +7,10 @@ import datetime as dt
 
 class HS:
     @staticmethod
-    def get_data():
+    def get_data(prodcode):
         dd = []
-        trades = get_all_trades_by_array()
+        all_trades = get_all_trades_by_array()
+        trades = [t for t in all_trades if t.ProdCode.decode() == prodcode]
         for t in trades:
             try:
                 bs = t.Qty if t.BuySell == b'B' else -t.Qty
