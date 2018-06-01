@@ -1403,6 +1403,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.AccInfo.pushButton_Order_Stoploss.released.connect(self.OrderStoploss.pos_update_sig)
         self.login_sig.connect(self.__load_last_prodcode)
 
+        self.AccInfo.price_update_sig.connect(self.OrderStoploss.update_bid_ask_table)
+
 
     def bind_account(self, account_id):
         self.OrderStoploss.comboBox_account.addItem(account_id)
@@ -1473,7 +1475,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def init_tradesession_table(self):
         try:
             self.trade_session = QTradeSession()
-            self.trade_session.recalc(self.Order.lineEdit_ProdCode.text())
+            self.trade_session.recalc(self.OrderStoploss.lineEdit_ProdCode.text())
             self.trade_session.show()
         except Exception as e:
             QMessageBox.critical(self, 'CRITICAL-TradeSession初始化', f'错误:{e}')
@@ -1868,6 +1870,24 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         self.pushButton_del_short_sl.released.connect(self.del_short_sl)
         self.pushButton_del_remain_sl.released.connect(self.del_remain_sl)
 
+
+    def update_bid_ask_table(self, price):
+        if price['ProdCode'].decode() == self.lineEdit_ProdCode.text():
+            for i, (b, bq) in enumerate(zip(price['Bid'], price['BidQty'])):
+                bid_item = QTableWidgetItem(str(b))
+                bid_qty_item = QTableWidgetItem(str(bq))
+                bid_qty_item.setBackground(QColor('#FF0000') if bq >= 10 else QColor('#FFFFFF'))
+                self.tableWidget_bid_ask.setItem(5 + i, 0, bid_item)
+                self.tableWidget_bid_ask.setItem(5 + i, 1, bid_qty_item)
+
+            for i, (a, aq) in enumerate(zip(price['Ask'], price['AskQty'])):
+                ask_item = QTableWidgetItem(str(a))
+                ask_qty_item = QTableWidgetItem(str(aq))
+                ask_qty_item.setBackground(QColor('#00FF00') if aq >= 10 else QColor('#FFFFFF'))
+                self.tableWidget_bid_ask.setItem(4 - i, 0, ask_item)
+                self.tableWidget_bid_ask.setItem(4 - i, 1, ask_qty_item)
+
+            self.tableWidget_bid_ask.viewport().update()
 
 
     def order(self, BuySell):
