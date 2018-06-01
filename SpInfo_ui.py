@@ -2015,47 +2015,33 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
 
     def _get_holding_pos(self, trades_info):  # 获取持仓
         prodcode = self.lineEdit_prodcode.text()
-        current_trades = [trade for Id, trade in trades_info.items() if trade['ProdCode'].decode('GBK') == prodcode]
+        current_trades = [{'TradeTime': trade['TradeTime'], 'Qty': trade['Qty'] if trade['BuySell'] == b'B' else -trade['Qty'], 'Price': trade['AvgPrice']} for Id, trade in trades_info.items() if trade['ProdCode'].decode('GBK') == prodcode]
 
         pos = get_pos_by_product(prodcode)
-        pre_pos = pos.Qty
-        pre_pos_price = pos.TotalAmt  / pre_pos if pre_pos !=0 else 0
+        if pos.Qty != 0:
+            qty = pos.Qty if pos.LongShort == b'B' else -pos.Qty
+            price = pos.TotalAmt  / qty
+            remain_pos = {'TradeTime': 0, 'Qty': qty, 'Price': price}
+            current_trades.append(remain_pos)
+        print(current_trades)
+        current_trades.sort(key=lambda x:x['TradeTime'])
+        print(current_trades)
 
-        self.trade_long_queue = []
-        self.trade_short_queue = []
-
-        if pos.LongShort == b'B':
-            self.trade_long_queue.extend([pre_pos_price] * pre_pos)
-        elif pos.LongShort == b'S':
-            self.trade_short_queue.extend([pre_pos_price] * pre_pos)
-
+        holding_pos = [0 , 0]
         for t in current_trades:
-            current_trade = [t['AvgPrice']] * t['Qty']
-            if t['BuySell'].decode('GBK') == 'B':
-                self.trade_long_queue.extend(current_trade)
-            else:
-                self.trade_short_queue.extend(current_trade)
+            holding_qty = holding_pos[0] + t['Qty']
+            hodling_price = (holding_pos[1] * holding_pos[0] + t['Price'] * t['Qty']) / holding_qty if holding_qty != 0 else 0
+            holding_pos = [holding_qty, hodling_price]
 
-        long_qty = len(self.trade_long_queue)
-        short_qty = len(self.trade_short_queue)
-        holding_qty = long_qty - short_qty
-
-        if holding_qty > 0:
-            holding_pos = self.trade_long_queue[:holding_qty]
-        elif holding_qty < 0:
-            holding_pos = self.trade_short_queue[:-holding_qty]
-        else:
-            holding_pos = []
-
-        return holding_qty, holding_pos
+        return holding_pos
 
     def update_holding_pos_LIFO(self):  # 后进先出方法计算持仓
         try:
-            self.holding_qty, holding_pos = self._get_holding_pos(self.parent().AccInfo.data.Trade)
-            holding_price = sum(holding_pos) / len(holding_pos)
+            self.holding_qty, holding_price = self._get_holding_pos(self.parent().AccInfo.data.Trade)
             self.holding_pos = [self.holding_qty, holding_price]
         except Exception as e:
             self.lineEdit_hodling_pos.setText('-')
+            raise e
         else:
             if self.holding_qty != 0:
                 self.lineEdit_hodling_pos.setText(f'{self.holding_qty}@{holding_price:.2f}')
@@ -2080,7 +2066,6 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
             if session_holding_pos != 0:
                 self.lineEdit_session_pos.setText(f'{session_holding_pos}@{session_net_cost}')
                 self.session_pos = [session_holding_pos, session_net_cost]
-
             else:
                 self.lineEdit_session_pos.setText('-@-')
 
