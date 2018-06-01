@@ -794,8 +794,8 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):  # 快速下�
             bid = price_dict['Bid'][0]
             ask = price_dict['Ask'][0]
             toler = self.spinBox_toler.value()
-            self.pushButton_long.setText(f'追价买入\n@{bid}->{bid + toler}')
-            self.pushButton_short.setText(f'追价沽出\n@{ask}->{ask - toler}')
+            self.pushButton_long.setText(f'追价买入\n@{ask}->{ask + toler}')
+            self.pushButton_short.setText(f'追价沽出\n@{bid}->{bid - toler}')
             # self.label_long_info.setText(f'@{bid}->{bid + toler}')
             # self.label_short_info.setText(f'@{ask}->{ask - toler}')
 
