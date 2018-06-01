@@ -31,6 +31,7 @@ from operator import add
 from queue import Queue
 from threading import Thread
 import pymysql as pm
+import pandas as pd
 from extra.calc import HS
 
 class QSqlTable(QtWidgets.QTableView):
@@ -1409,6 +1410,23 @@ class MainWindow(QtWidgets.QMainWindow):
     def bind_account(self, account_id):
         self.OrderStoploss.comboBox_account.addItem(account_id)
 
+    def save_trade_info(self):
+        trades = get_all_trades_by_array()
+        trades_info = []
+        for t in trades:
+            trade_dict = {}
+            for name, c_type in t._fields_:
+                v = getattr(t, name)
+                v = v if not isinstance(v, bytes) else v.decode()
+                trade_dict[name] = v
+            trades_info.append(trade_dict)
+
+        writer = pd.ExcelWriter('交易记录.xlsx')
+        df = pd.DataFrame(trades_info)
+        df.to_excel(writer,f'{dt.datetime.now().date()}', index=False)
+        writer.save()
+
+
     def init_spapi(self):  # 初始化SPAPI并登录
         Login = self.Login
         host = Login.lineEdit_host.text()
@@ -1524,6 +1542,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                                QtWidgets.QMessageBox.No)
         if reply == QtWidgets.QMessageBox.Yes:
             self.__save_last_prodcode()
+            self.save_trade_info()
             a0.accept()
             logout()
             unintialize()
@@ -2041,7 +2060,6 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
             self.holding_pos = [self.holding_qty, holding_price]
         except Exception as e:
             self.lineEdit_hodling_pos.setText('-')
-            raise e
         else:
             if self.holding_qty != 0:
                 self.lineEdit_hodling_pos.setText(f'{self.holding_qty}@{holding_price:.2f}')
