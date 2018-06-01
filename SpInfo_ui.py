@@ -1998,6 +1998,10 @@ class QQuickStoploss(QDialog, Ui_Dialog_quick_stoploss):
     def init_signal(self):
         self.pos_update_sig.connect(lambda :[self.update_holding_pos_LIFO(), self.update_session_pos(), self.update_all_pos()])
         self.pushButton_stoploss.released.connect(self.quick_stoploss)
+        self.pushButton_del_all_orders.released.connect(delete_all_orders)
+        self.pushButton_del_long_sl.released.connect(self.del_long_sl)
+        self.pushButton_del_short_sl.released.connect(self.del_short_sl)
+        self.pushButton_del_remain_sl.released.connect(self.del_remain_sl)
 
     def _get_holding_pos(self, trades_info):  # 获取持仓
         prodcode = self.lineEdit_prodcode.text()
@@ -2091,15 +2095,18 @@ class QQuickStoploss(QDialog, Ui_Dialog_quick_stoploss):
             self.groupBox_quick_sl.setTitle(f'{prodcode}@{price_dict["Last"][0]}')
 
     def quick_stoploss(self):
-        if self.radioButton_holding.isChecked():
-            qty, price = self.holding_pos
-        elif self.radioButton_session.isChecked():
-            qty, price = self.session_pos
-        elif self.radioButton_all.isChecked():
-            qty, price = self.all_pos
-        else:
+        try:
+            if self.radioButton_holding.isChecked():
+                qty, price = self.holding_pos
+            elif self.radioButton_session.isChecked():
+                qty, price = self.session_pos
+            elif self.radioButton_all.isChecked():
+                qty, price = self.all_pos
+            else:
+                raise Exception('请选择止损方式')
+        except Exception as e:
+            QMessageBox.warning(self, '<WARING>止损', f'无法获取持仓:{e}')
             return
-        print(qty, price)
         lock = self.spinBox_lock.value()
 
         if qty > 0 :
@@ -2134,10 +2141,38 @@ class QQuickStoploss(QDialog, Ui_Dialog_quick_stoploss):
             else:
                 QMessageBox.warning(self,  '<WARING>止损', '全部仓位已锁定, ,请重新设置锁定仓位')
 
+    def del_long_sl(self):
+        try:
+            orders = get_orders_by_array()
+            for o in orders:
+                if 'quick_sl-long' in o.Ref.decode():
+                    o_id = o.IntOrderNo
+                    o_prodcode = o.ProdCode.decode()
+                    delete_order_by(o_id, o_prodcode)
+        except Exception as e:
+            QMessageBox.warning(self, '<WARING>删除止损', f'错误:{e}')
 
+    def del_short_sl(self):
+        try:
+            orders = get_orders_by_array()
+            for o in orders:
+                if 'quick_sl-short' in o.Ref.decode():
+                    o_id = o.IntOrderNo
+                    o_prodcode = o.ProdCode.decode()
+                    delete_order_by(o_id, o_prodcode)
+        except Exception as e:
+            QMessageBox.warning(self, '<WARING>删除止损', f'错误:{e}')
 
-
-
+    def del_remain_sl(self):
+        try:
+            orders = get_orders_by_array()
+            for o in orders:
+                if 'quick_sl' in o.Ref.decode():
+                    o_id = o.IntOrderNo
+                    o_prodcode = o.ProdCode.decode()
+                    delete_order_by(o_id, o_prodcode)
+        except Exception as e:
+            QMessageBox.warning(self, '<WARING>删除止损', f'错误:{e}')
 
 
 if __name__ == '__main__':
