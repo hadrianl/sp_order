@@ -1566,7 +1566,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.login_sig.connect(lambda: [self.AccInfo.refresh_accbals(), self.AccInfo.refresh_ccy_rate()])  # 登录时更新结余和汇率
         self.login_sig.connect(
             lambda: self.timer.singleShot(3000, lambda: [subscribe_price(p, 1) for p in self.AccInfo.data.sub_list]))  # 登录3秒后会自动订阅sublist的价格，sublist通过持仓的回调函数添加产品代码
-        self.AccInfo.pushButton_test.released.connect(self.init_sql_table)  # 按钮test的测试
+        self.AccInfo.pushButton_mt4_order.released.connect(self.init_sql_table)  # 按钮test的测试
         self.AccInfo.pushButton_tradesession.released.connect(self.init_tradesession_table)  # 交易会话
         self.AccInfo.checkBox_wechat_info.clicked.connect(
             lambda b: self.init_wechat_info() if b else self.deinit_wechat_info())  # 微信消息推送的初始化与反初始化
@@ -1595,6 +1595,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.trayicon.action_quickorder.toggled.connect(lambda b: self.QuickOrder.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint) if b else self.QuickOrder.setWindowFlags(Qt.Qt.Window))
         self.trayicon.action_order.toggled.connect(self.AccInfo.pushButton_Order.setChecked)
         self.trayicon.action_quickorder.toggled.connect(self.AccInfo.pushButton_QuickOrder.setChecked)
+        self.trayicon.action_quickstoploss.toggled.connect(lambda b:self.QucikStoploss.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)if b else self.QucikStoploss.setWindowFlags(Qt.Qt.Window))
 
         self.Order.checkBox_order_assistant.toggled.connect(self.OrderAssistant.setVisible)
         self.Order.moveEvent = lambda a0: self.OrderAssistant.move(a0.pos().x() + self.Order.width(), a0.pos().y())
@@ -1919,10 +1920,12 @@ class QTrayIcon(QtWidgets.QSystemTrayIcon):
         self.action_accinfo = QtWidgets.QAction('账户', self, checkable=True)
         self.action_order = QtWidgets.QAction('下单', self, checkable=True)
         self.action_quickorder = QtWidgets.QAction('点击下单', self, checkable=True)
+        self.action_quickstoploss = QtWidgets.QAction('快速止损', self, checkable=True)
         self.action_quit = QtWidgets.QAction("退出", self)
         self.menu_suspen.addAction(self.action_accinfo)
         self.menu_suspen.addAction(self.action_order)
         self.menu_suspen.addAction(self.action_quickorder)
+        self.menu_suspen.addAction(self.action_quickstoploss)
         self.menu.addMenu(self.menu_suspen)
         self.menu.addAction(self.action_quit)
         self.setContextMenu(self.menu)
