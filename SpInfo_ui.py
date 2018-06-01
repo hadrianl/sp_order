@@ -14,6 +14,7 @@ from ui.quick_order_dialog import Ui_Dialog_quick_order
 from ui.order_comfirm_dialog import Ui_Dialog_order_comfirm
 from ui.close_position_dialog import Ui_Dialog_close_position
 from ui.quick_stoploss_dialog import Ui_Dialog_quick_stoploss
+from ui.order_stoploss_dialog import Ui_Dialog_order_stoploss
 from baseitems import QPubOrder, QSubOrder, QWechatInfo
 from ui.order_assistant_widget import Ui_Form_OrderAssistant
 from ui.time_widget import Ui_Form_time
@@ -78,208 +79,6 @@ class QSqlTable(QtWidgets.QTableView):
             self.show()
         else:
             raise Exception(self._db.lastError().text())
-
-class OrderDialog(QDialog, Ui_Dialog_order):
-    def __init__(self, parent=None):
-        QDialog.__init__(self, parent)
-        Ui_Dialog_order.__init__(self)
-        self.setupUi(self)
-        self.init_state()
-        self.init_signal()
-
-    def init_state(self):
-        self.setWindowFlags(Qt.Qt.Window)
-        self.dateEdit_ValidTime.setDate(dt.datetime.now().date())
-        self.dateTimeEdit_sched_time.setDateTime(dt.datetime.now())
-        self.spinBox_market_level.setDisabled(True)
-        self.label_ValidTime.setHidden(True)
-        self.dateEdit_ValidTime.setHidden(True)
-        self.spinBox_Price.setSpecialValueText(' ')
-        self.spinBox_StopLevel.setSpecialValueText(' ')
-        self.spinBox_StopLevel2.setSpecialValueText(' ')
-        self.spinBox_oco_StopLevel.setSpecialValueText(' ')
-        self._price_flag = True
-        self._sl_flag = True
-        self._sl2_flag = True
-        self._oco_sl_flag = True
-        # desktop = QDesktopWidget()
-        # self.move(desktop.width() - self.width(),(desktop.height() - self.height())/2 - 70)
-
-    def init_signal(self):
-        self.comboBox_CondType.activated.connect(lambda n: (self.spinBox_Price.setDisabled(n in [1]),
-                                                            self.checkBox_Auction.setHidden(n in [1, 2, 3, 4]),
-                                                            self.checkBox_Auction.setCheckState(0),
-                                                            self.checkBox_Market.setHidden(n in [1, 2, 4]),
-                                                            self.checkBox_Market.setCheckState(0),
-                                                            self.checkBox_stop_tri.setCheckState(0),
-                                                            self.comboBox_ValidType.setCurrentIndex(0),
-                                                            self.checkBox_invalid.setEnabled(n in [0, 3]),
-                                                            self.checkBox_invalid.setCheckable(n in [0, 3]),
-                                                            self.pushButton_buy.setHidden(n in [1, 2]),
-                                                            self.pushButton_sell.setHidden(n in [1, 2]),
-                                                            self.spinBox_Price.setValue(0) if n in [2] else ...,
-                                                            setattr(self, '_price_flag', True),
-                                                            setattr(self, '_sl_flag', True),
-                                                            setattr(self, '_sl2_flag', True),
-                                                            setattr(self, '_oco_sl_flag', True)
-                                                            ))
-        self.comboBox_ValidType.currentIndexChanged.connect(lambda n: (
-                                                             self.checkBox_stop_tri.setCheckState(0) if n in [1, 2] else ...,
-                                                             self.checkBox_Auction.setEnabled(n in [0]),
-                                                             self.checkBox_Market.setEnabled(n in [0]),
-                                                             self.checkBox_stop_tri.setEnabled(n in [0, 3, 4]),
-                                                             self.dateEdit_ValidTime.setVisible(n in [4]),
-                                                             self.dateEdit_ValidTime.setEnabled(n in [4]),
-                                                             self.label_ValidTime.setVisible(n in [4]),
-                                                             ))
-        self.checkBox_stop_tri.toggled.connect(lambda x: (self.comboBox_StopType.setCurrentIndex(0) if not x else ...,
-                                                          self.spinBox_StopLevel.setValue(0) if not x else ...))
-        self.checkBox_Market.toggled.connect(lambda x: (self.spinBox_Price.setValue(0) if x else ...,
-                                                        ))
-        self.checkBox_Auction.toggled.connect(lambda x: (self.spinBox_Price.setValue(0x7fffffff) if x else self.spinBox_Price.setValue(0),
-                                                         ))
-        self.comboBox_StopType.activated.connect(lambda n: self.checkBox_Market.setChecked(n in [3]))
-        self.spinBox_StopLevel2.valueChanged.connect(lambda x: self.spinBox_Price.setValue(x + self.spinBox_toler.value()if self.radioButton_buy1.isChecked() else x - self.spinBox_toler.value())if not self.checkBox_Market.checkState() else 0)
-        self.spinBox_toler.valueChanged.connect(lambda x: self.spinBox_Price.setValue((x + self.spinBox_StopLevel2.value() if self.radioButton_buy1.isChecked() else self.spinBox_StopLevel2.value() - x) if not self.checkBox_Market.checkState() else 0))
-        self.radioButton_buy1.toggled.connect(lambda x: self.spinBox_Price.setValue(self.spinBox_StopLevel2.value() + self.spinBox_toler.value()))
-        self.radioButton_sell1.toggled.connect(lambda x: self.spinBox_Price.setValue(self.spinBox_StopLevel2.value() - self.spinBox_toler.value()))
-        self.spinBox_oco_StopLevel.valueChanged.connect(lambda x: self.label_oco_pirce.setText(f'{x + self.spinBox_oco_toler.value() if self.radioButton_buy2.isChecked() else x - self.spinBox_oco_toler.value()}'))
-        self.spinBox_oco_toler.valueChanged.connect(lambda x: self.label_oco_pirce.setText(f'{x + self.spinBox_oco_StopLevel.value() if self.radioButton_buy2.isChecked() else self.spinBox_oco_StopLevel.value() - x}'))
-        self.radioButton_buy2.toggled.connect(lambda x: self.label_oco_pirce.setText(f'{self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()}'))
-        self.radioButton_sell1.toggled.connect(lambda x: self.label_oco_pirce.setText(f'{self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()}'))
-        self.spinBox_Price.valueChanged.connect(lambda x: (self.spinBox_Price.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_price_flag', False)) if self._price_flag else ...)
-        self.spinBox_StopLevel.valueChanged.connect(lambda x: (self.spinBox_StopLevel.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_sl_flag', False)) if self._sl_flag else ...)
-        self.spinBox_StopLevel2.valueChanged.connect(lambda x: (self.spinBox_StopLevel2.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_sl2_flag', False)) if self._sl2_flag else ...)
-        self.spinBox_oco_StopLevel.valueChanged.connect(lambda x: (self.spinBox_oco_StopLevel.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_oco_sl_flag', False)) if self._oco_sl_flag else ...)
-        self.pushButton_buy.released.connect(lambda :self.order('B'))
-        self.pushButton_sell.released.connect(lambda :self.order('S'))
-        # self.checkBox_lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
-        self.rejected.connect(lambda : self.checkBox_order_assistant.setChecked(False))
-
-    def order(self, BuySell):
-        try:
-            order_kwargs = {}
-            order_kwargs['BuySell'] = BuySell
-            order_kwargs['ProdCode'] = self.lineEdit_ProdCode.text()
-            current_price = get_price_by_code(order_kwargs['ProdCode'])
-            order_kwargs['Qty'] = self.spinBox_Qty.value()
-            order_kwargs['Ref'] = self.lineEdit_Ref.text()
-            order_kwargs['OrderOptions'] = 1 if self.checkBox_OrderOptions.checkState() else 0
-            _condtype_index = self.comboBox_CondType.currentIndex()
-            order_kwargs['CondType'] = {0: 0, 1: 1, 2: 4,3: 0, 4: 3}[_condtype_index]
-            if _condtype_index == 0:
-                _order_type = (self.checkBox_Auction.checkState() << 1) + self.checkBox_Market.checkState()
-                order_kwargs['OrderType'] = {0: 0, 2: 6, 4: 2}[_order_type]
-                order_kwargs['Price'] = {0: self.spinBox_Price.value(), 2: 0, 4: 0x7fffffff}[_order_type]
-                order_kwargs['ValidType'] = self.comboBox_ValidType.currentIndex()
-
-                if order_kwargs['ValidType'] == 4:
-                    order_kwargs['ValidTime'] = int(dt.datetime.strptime(self.dateEdit_ValidTime.date().toPyDate().strftime('%Y/%m/%d'),
-                                                         '%Y/%m/%d').timestamp())
-                if self.checkBox_stop_tri.isChecked():
-                    order_kwargs['StopType'] = {0: 'L', 1: 'U', 2: 'D', 3: 'L'}[self.comboBox_StopType.currentIndex()]
-                    order_kwargs['StopLevel'] = self.spinBox_StopLevel.value()
-                    order_kwargs['CondType'] = 1
-                else:
-                    order_kwargs['StopLevel'] = 0
-
-            elif _condtype_index == 1:
-                order_kwargs['StopType'] = 'L'
-                order_kwargs['ValidType'] = 0
-                order_kwargs['Price'] = (self.spinBox_StopLevel2.value() + self.spinBox_toler.value()) if BuySell == 'B' \
-                    else (self.spinBox_StopLevel2.value() - self.spinBox_toler.value())
-                order_kwargs['StopLevel'] = self.spinBox_StopLevel2.value()
-                if self.checkBox_Trailing_Stop.isChecked():
-                    order_kwargs['CondType'] = 6
-
-                    if BuySell == 'B':
-                        order_kwargs['UpLevel'] = current_price.Ask[0]
-                        order_kwargs['UpPrice'] = order_kwargs['StopLevel']
-                        order_kwargs['DownLevel'] = self.spinBox_trailing_stop_step.value()
-                    else:
-                        order_kwargs['DownLevel'] = current_price.Bid[0]
-                        order_kwargs['DownPrice'] = order_kwargs['StopLevel']
-                        order_kwargs['UpLevel'] = self.spinBox_trailing_stop_step.value()
-
-            elif _condtype_index == 2:
-                order_kwargs['ValidType'] = 0
-                order_kwargs['Price'] = self.spinBox_Price.value()
-
-                if BuySell == 'B':
-                    order_kwargs['UpLevel'] = self.spinBox_oco_StopLevel.value()
-                    order_kwargs['UpPrice'] = self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()
-                else:
-                    order_kwargs['DownLevel'] = self.spinBox_oco_StopLevel.value()
-                    order_kwargs['DownPrice'] = self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()
-
-            elif _condtype_index == 3:
-                order_kwargs['ValidType'] = 0
-                _profit = self.spinBox_bullbear_profit.value()
-                _loss = self.spinBox_bullbear_loss.value()
-                _loss_toler = self.spinBox_bullbear_loss_toler.value()
-                order_kwargs['Price'] = Price = self.spinBox_Price.value()
-
-                if BuySell == 'B':
-                    order_kwargs['UpLevel'] = Price + _profit
-                    order_kwargs['UpPrice'] = Price + _profit
-                    order_kwargs['DownLevel'] = Price - _loss
-                    order_kwargs['DownPrice'] = Price - _loss - _loss_toler
-                else:
-                    order_kwargs['DownLevel'] = Price - _profit
-                    order_kwargs['DownPrice'] = Price - _profit
-                    order_kwargs['UpLevel'] = Price + _loss
-                    order_kwargs['UpPrice'] = Price + _loss + _loss_toler
-
-            elif _condtype_index == 4:
-                order_kwargs['ValidType'] = 0
-                order_kwargs['Price'] = self.spinBox_Price.value()
-                _sched_time = self.dateTimeEdit_sched_time.dateTime().toPyDateTime()
-                order_kwargs['SchedTime'] = int(_sched_time.timestamp())
-
-            cond = get_order_cond(order_kwargs)
-        except Exception as e:
-            print(e)
-            # raise e
-        else:
-            comfirm_order = ComfirmDialog(self, Cond=cond, **order_kwargs)
-
-            if self.checkBox_invalid.isChecked():
-                comfirm_order.label_subtitle.setText('新增无效指示')
-                comfirm_order.show()
-                comfirm_order.accepted.connect(lambda: add_inactive_order(**order_kwargs))
-            else:
-                comfirm_order.show()
-                comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
-
-    def oco_close(self, prodcode, net_qty, tp, sl):
-        print( prodcode, net_qty, tp, sl)
-        self.comboBox_CondType.setCurrentIndex(2)
-        self._price_flag = False
-        self._oco_sl_flag = False
-
-        if net_qty > 0:
-            self.lineEdit_ProdCode.setText(prodcode)
-            self.lineEdit_ProdCode.update()
-            self.radioButton_sell2.toggle()
-            self.spinBox_Qty.setValue(net_qty)
-            self.spinBox_Price.setValue(tp)
-            self.spinBox_oco_StopLevel.setValue(sl)
-            self.spinBox_oco_toler.setValue(5)
-            self.show()
-            self.checkBox_lock.setChecked(True)
-        elif net_qty < 0:
-            self.lineEdit_ProdCode.setText(prodcode)
-            self.lineEdit_ProdCode.update()
-            self.radioButton_buy2.toggle()
-            self.spinBox_Qty.setValue(-net_qty)
-            self.spinBox_Price.setValue(tp)
-            self.spinBox_oco_StopLevel.setValue(sl)
-            self.spinBox_oco_toler.setValue(5)
-            self.show()
-            self.checkBox_lock.setChecked(True)
-    # def closeEvent(self, a0: QtGui.QCloseEvent):
-    #     self.parent().AccInfo.pushButton_Order.setChecked(False)
-    #     a0.accept()
 
 
 class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
@@ -1543,10 +1342,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.order_sub = QSubOrder(self.order_pub.order_queue, self)  # 跟单订单处理类
         self.Login = SpLoginDialog(self)  # 登录界面
         self.AccInfo = AccInfoWidget(self)  # 账户信息界面类
-        self.Order = OrderDialog(self)  # 普通下单界面
+        self.OrderStoploss = QOrderStoplossDialog(self)  # 下单与快速止损综合界面
         self.QuickOrder = QuickOrderDialog(self)  # 快速下单界面
         self.OrderAssistant = OrderAssistantWidget(self)  # 辅助下单界面
-        self.QucikStoploss = QQuickStoploss(self)
         self.update_thread = Thread(target=self.info_handler)  # 回调信息的处理进程
         self.update_thread.start()
         self.trayicon = QTrayIcon(self)
@@ -1578,38 +1376,36 @@ class MainWindow(QtWidgets.QMainWindow):
         self.AccInfo.price_update_sig.connect(self.QuickOrder.price_table_update)
         self.AccInfo.price_update_sig.connect(self.QuickOrder.price_info_update)
         self.AccInfo.price_update_sig.connect(self.QuickOrder.holding_profit)
-        self.AccInfo.pushButton_Order.toggled.connect(self.Order.setVisible)
+        self.AccInfo.pushButton_Order_Stoploss.toggled.connect(self.OrderStoploss.setVisible)
         self.AccInfo.pushButton_QuickOrder.toggled.connect(self.QuickOrder.setVisible)
-        self.Order.lineEdit_ProdCode.textChanged.connect(lambda text: [self.QuickOrder.lineEdit_ProdCode.setText(text), self.OrderAssistant.lineEdit_ProdCode.setText(text), self.QucikStoploss.lineEdit_prodcode.setText(text)])  # 普通下单与快速下单的代码输入绑定
-        self.QuickOrder.lineEdit_ProdCode.textChanged.connect(lambda text: [self.Order.lineEdit_ProdCode.setText(text), self.OrderAssistant.lineEdit_ProdCode.setText(text), self.QucikStoploss.lineEdit_prodcode.setText(text)])  # 普通下单与快速下单的代码输入绑定
+        self.OrderStoploss.lineEdit_ProdCode.textChanged.connect(lambda text: [self.QuickOrder.lineEdit_ProdCode.setText(text), self.OrderAssistant.lineEdit_ProdCode.setText(text), self.OrderStoploss.lineEdit_prodcode.setText(text)])  # 普通下单与快速下单的代码输入绑定
+        self.QuickOrder.lineEdit_ProdCode.textChanged.connect(lambda text: [self.OrderStoploss.lineEdit_ProdCode.setText(text), self.OrderAssistant.lineEdit_ProdCode.setText(text), self.OrderStoploss.lineEdit_prodcode.setText(text)])  # 普通下单与快速下单的代码输入绑定
 
-        self.Order.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)  # 普通下单与快速下单的代码输入绑定
-        self.QuickOrder.checkBox_Lock.toggled.connect(self.Order.checkBox_lock.setChecked)  # 普通下单与快速下单的代码输入绑定
+        self.OrderStoploss.checkBox_lock.toggled.connect(self.QuickOrder.checkBox_Lock.setChecked)  # 普通下单与快速下单的代码输入绑定
+        self.QuickOrder.checkBox_Lock.toggled.connect(self.OrderStoploss.checkBox_lock.setChecked)  # 普通下单与快速下单的代码输入绑定
         self.AccInfo.pos_info_sig.connect(self.OrderAssistant.calc_amount_base)
-        self.OrderAssistant.oco_close_sig.connect(self.Order.oco_close)
+        self.OrderAssistant.oco_close_sig.connect(self.OrderStoploss.oco_close)
         self.QuickOrder.checkBox_Lock.toggled.connect(
             lambda b: self.QuickOrder.position_takeprofit_info_update(self.AccInfo.data.Trade) if b else ...)
 
         self.trayicon.action_accinfo.toggled.connect(lambda b: [self.AccInfo.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint), self.AccInfo.show()] if b else [self.AccInfo.setWindowFlags(Qt.Qt.Window), self.AccInfo.hide()])
-        self.trayicon.action_order.toggled.connect(lambda b: self.Order.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)if b else self.Order.setWindowFlags(Qt.Qt.Window))
+        self.trayicon.action_order_stoploss.toggled.connect(lambda b: self.OrderStoploss.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)if b else self.OrderStoploss.setWindowFlags(Qt.Qt.Window))
         self.trayicon.action_quickorder.toggled.connect(lambda b: self.QuickOrder.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint) if b else self.QuickOrder.setWindowFlags(Qt.Qt.Window))
-        self.trayicon.action_order.toggled.connect(self.AccInfo.pushButton_Order.setChecked)
+        self.trayicon.action_order_stoploss.toggled.connect(self.AccInfo.pushButton_Order_Stoploss.setChecked)
         self.trayicon.action_quickorder.toggled.connect(self.AccInfo.pushButton_QuickOrder.setChecked)
-        self.trayicon.action_quickstoploss.toggled.connect(lambda b:self.QucikStoploss.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)if b else self.QucikStoploss.setWindowFlags(Qt.Qt.Window))
 
-        self.Order.checkBox_order_assistant.toggled.connect(self.OrderAssistant.setVisible)
-        self.Order.moveEvent = lambda a0: self.OrderAssistant.move(a0.pos().x() + self.Order.width(), a0.pos().y())
+        self.OrderStoploss.checkBox_order_assistant.toggled.connect(self.OrderAssistant.setVisible)
+        self.OrderStoploss.moveEvent = lambda a0: self.OrderAssistant.move(a0.pos().x() + self.OrderStoploss.width(), a0.pos().y())
 
-        self.AccInfo.pos_info_sig.connect(self.QucikStoploss.pos_update_sig)
-        self.AccInfo.price_update_sig.connect(self.QucikStoploss.update_price)
+        self.AccInfo.pos_info_sig.connect(self.OrderStoploss.pos_update_sig)
+        self.AccInfo.price_update_sig.connect(self.OrderStoploss.update_price)
 
-        self.AccInfo.pushButton_QuickStoploss.released.connect(self.QucikStoploss.show)
-        self.AccInfo.pushButton_QuickStoploss.released.connect(self.QucikStoploss.pos_update_sig)
+        self.AccInfo.pushButton_Order_Stoploss.released.connect(self.OrderStoploss.pos_update_sig)
         self.login_sig.connect(self.__load_last_prodcode)
 
 
     def bind_account(self, account_id):
-        self.Order.comboBox_account.addItem(account_id)
+        self.OrderStoploss.comboBox_account.addItem(account_id)
 
     def init_spapi(self):  # 初始化SPAPI并登录
         Login = self.Login
@@ -1707,7 +1503,7 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 with open('LP.plk', 'rb') as lp:
                     prodcode = pickle.load(lp)
-                    self.Order.lineEdit_ProdCode.setText(prodcode)
+                    self.OrderStoploss.lineEdit_ProdCode.setText(prodcode)
                 self.timer.singleShot(5000, lambda :subscribe_price(prodcode, 1))
             except Exception as e:
                 print(e)
@@ -1715,7 +1511,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __save_last_prodcode(self):
         try:
             with open('LP.plk', 'wb') as lp:
-                prodcode = self.Order.lineEdit_ProdCode.text()
+                prodcode = self.OrderStoploss.lineEdit_ProdCode.text()
                 pickle.dump(prodcode, lp)
         except Exception as e:
             print(e)
@@ -1918,14 +1714,12 @@ class QTrayIcon(QtWidgets.QSystemTrayIcon):
         self.menu_suspen = QtWidgets.QMenu()
         self.menu_suspen.setTitle('悬浮置顶')
         self.action_accinfo = QtWidgets.QAction('账户', self, checkable=True)
-        self.action_order = QtWidgets.QAction('下单', self, checkable=True)
+        self.action_order_stoploss = QtWidgets.QAction('下单与止损', self, checkable=True)
         self.action_quickorder = QtWidgets.QAction('点击下单', self, checkable=True)
-        self.action_quickstoploss = QtWidgets.QAction('快速止损', self, checkable=True)
         self.action_quit = QtWidgets.QAction("退出", self)
         self.menu_suspen.addAction(self.action_accinfo)
-        self.menu_suspen.addAction(self.action_order)
+        self.menu_suspen.addAction(self.action_order_stoploss)
         self.menu_suspen.addAction(self.action_quickorder)
-        self.menu_suspen.addAction(self.action_quickstoploss)
         self.menu.addMenu(self.menu_suspen)
         self.menu.addAction(self.action_quit)
         self.setContextMenu(self.menu)
@@ -1984,27 +1778,220 @@ class QTradeSession(QTableWidget):
                 self.setItem(i, c, QTableWidgetItem(str(data.iat[i, c])))
 
 
-class QQuickStoploss(QDialog, Ui_Dialog_quick_stoploss):
+class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
     pos_update_sig = pyqtSignal()
     def __init__(self, parent=None):
         QDialog.__init__(self, parent)
-        Ui_Dialog_quick_stoploss.__init__(self)
+        Ui_Dialog_order_stoploss.__init__(self)
         self.setupUi(self)
+        self.init_state()
+        self.init_signal()
+
+    def init_state(self):
+        self.setWindowFlags(Qt.Qt.Window)
+        self.dateEdit_ValidTime.setDate(dt.datetime.now().date())
+        self.dateTimeEdit_sched_time.setDateTime(dt.datetime.now())
+        self.spinBox_market_level.setDisabled(True)
+        self.label_ValidTime.setHidden(True)
+        self.dateEdit_ValidTime.setHidden(True)
+        self.spinBox_Price.setSpecialValueText(' ')
+        self.spinBox_StopLevel.setSpecialValueText(' ')
+        self.spinBox_StopLevel2.setSpecialValueText(' ')
+        self.spinBox_oco_StopLevel.setSpecialValueText(' ')
+        self._price_flag = True
+        self._sl_flag = True
+        self._sl2_flag = True
+        self._oco_sl_flag = True
         self.holding_qty = 0
         self.holding_pos = []
         self.session_pos = []
         self.all_pos = []
-        self.setWindowFlags(Qt.Qt.Window)
-        self.setWindowTitle('SP QUICK STOPLOSS')
-        self.init_signal()
+        # desktop = QDesktopWidget()
+        # self.move(desktop.width() - self.width(),(desktop.height() - self.height())/2 - 70)
 
     def init_signal(self):
-        self.pos_update_sig.connect(lambda :[self.update_holding_pos_LIFO(), self.update_session_pos(), self.update_all_pos()])
+        self.comboBox_CondType.activated.connect(lambda n: (self.spinBox_Price.setDisabled(n in [1]),
+                                                            self.checkBox_Auction.setHidden(n in [1, 2, 3, 4]),
+                                                            self.checkBox_Auction.setCheckState(0),
+                                                            self.checkBox_Market.setHidden(n in [1, 2, 4]),
+                                                            self.checkBox_Market.setCheckState(0),
+                                                            self.checkBox_stop_tri.setCheckState(0),
+                                                            self.comboBox_ValidType.setCurrentIndex(0),
+                                                            self.checkBox_invalid.setEnabled(n in [0, 3]),
+                                                            self.checkBox_invalid.setCheckable(n in [0, 3]),
+                                                            self.pushButton_buy.setHidden(n in [1, 2]),
+                                                            self.pushButton_sell.setHidden(n in [1, 2]),
+                                                            self.spinBox_Price.setValue(0) if n in [2] else ...,
+                                                            setattr(self, '_price_flag', True),
+                                                            setattr(self, '_sl_flag', True),
+                                                            setattr(self, '_sl2_flag', True),
+                                                            setattr(self, '_oco_sl_flag', True)
+                                                            ))
+        self.comboBox_ValidType.currentIndexChanged.connect(lambda n: (
+                                                             self.checkBox_stop_tri.setCheckState(0) if n in [1, 2] else ...,
+                                                             self.checkBox_Auction.setEnabled(n in [0]),
+                                                             self.checkBox_Market.setEnabled(n in [0]),
+                                                             self.checkBox_stop_tri.setEnabled(n in [0, 3, 4]),
+                                                             self.dateEdit_ValidTime.setVisible(n in [4]),
+                                                             self.dateEdit_ValidTime.setEnabled(n in [4]),
+                                                             self.label_ValidTime.setVisible(n in [4]),
+                                                             ))
+        self.checkBox_stop_tri.toggled.connect(lambda x: (self.comboBox_StopType.setCurrentIndex(0) if not x else ...,
+                                                          self.spinBox_StopLevel.setValue(0) if not x else ...))
+        self.checkBox_Market.toggled.connect(lambda x: (self.spinBox_Price.setValue(0) if x else ...,
+                                                        ))
+        self.checkBox_Auction.toggled.connect(lambda x: (self.spinBox_Price.setValue(0x7fffffff) if x else self.spinBox_Price.setValue(0),
+                                                         ))
+        self.comboBox_StopType.activated.connect(lambda n: self.checkBox_Market.setChecked(n in [3]))
+        self.spinBox_StopLevel2.valueChanged.connect(lambda x: self.spinBox_Price.setValue(x + self.spinBox_toler.value()if self.radioButton_buy1.isChecked() else x - self.spinBox_toler.value())if not self.checkBox_Market.checkState() else 0)
+        self.spinBox_toler.valueChanged.connect(lambda x: self.spinBox_Price.setValue((x + self.spinBox_StopLevel2.value() if self.radioButton_buy1.isChecked() else self.spinBox_StopLevel2.value() - x) if not self.checkBox_Market.checkState() else 0))
+        self.radioButton_buy1.toggled.connect(lambda x: self.spinBox_Price.setValue(self.spinBox_StopLevel2.value() + self.spinBox_toler.value()))
+        self.radioButton_sell1.toggled.connect(lambda x: self.spinBox_Price.setValue(self.spinBox_StopLevel2.value() - self.spinBox_toler.value()))
+        self.spinBox_oco_StopLevel.valueChanged.connect(lambda x: self.label_oco_pirce.setText(f'{x + self.spinBox_oco_toler.value() if self.radioButton_buy2.isChecked() else x - self.spinBox_oco_toler.value()}'))
+        self.spinBox_oco_toler.valueChanged.connect(lambda x: self.label_oco_pirce.setText(f'{x + self.spinBox_oco_StopLevel.value() if self.radioButton_buy2.isChecked() else self.spinBox_oco_StopLevel.value() - x}'))
+        self.radioButton_buy2.toggled.connect(lambda x: self.label_oco_pirce.setText(f'{self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()}'))
+        self.radioButton_sell1.toggled.connect(lambda x: self.label_oco_pirce.setText(f'{self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()}'))
+        self.spinBox_Price.valueChanged.connect(lambda x: (self.spinBox_Price.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_price_flag', False)) if self._price_flag else ...)
+        self.spinBox_StopLevel.valueChanged.connect(lambda x: (self.spinBox_StopLevel.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_sl_flag', False)) if self._sl_flag else ...)
+        self.spinBox_StopLevel2.valueChanged.connect(lambda x: (self.spinBox_StopLevel2.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_sl2_flag', False)) if self._sl2_flag else ...)
+        self.spinBox_oco_StopLevel.valueChanged.connect(lambda x: (self.spinBox_oco_StopLevel.setValue(int(get_price_by_code(self.lineEdit_ProdCode.text()).Last[0])), setattr(self, '_oco_sl_flag', False)) if self._oco_sl_flag else ...)
+        self.pushButton_buy.released.connect(lambda :self.order('B'))
+        self.pushButton_sell.released.connect(lambda :self.order('S'))
+        # self.checkBox_lock.toggled.connect(lambda x: subscribe_price(self.lineEdit_ProdCode.text(), 1) if x else subscribe_price(self.lineEdit_ProdCode.text(), 0))
+        self.rejected.connect(lambda : self.checkBox_order_assistant.setChecked(False))
+
+        self.pos_update_sig.connect(
+            lambda: [self.update_holding_pos_LIFO(), self.update_session_pos(), self.update_all_pos()])
         self.pushButton_stoploss.released.connect(self.quick_stoploss)
         self.pushButton_del_all_orders.released.connect(delete_all_orders)
         self.pushButton_del_long_sl.released.connect(self.del_long_sl)
         self.pushButton_del_short_sl.released.connect(self.del_short_sl)
         self.pushButton_del_remain_sl.released.connect(self.del_remain_sl)
+
+
+
+    def order(self, BuySell):
+        try:
+            order_kwargs = {}
+            order_kwargs['BuySell'] = BuySell
+            order_kwargs['ProdCode'] = self.lineEdit_ProdCode.text()
+            current_price = get_price_by_code(order_kwargs['ProdCode'])
+            order_kwargs['Qty'] = self.spinBox_Qty.value()
+            order_kwargs['Ref'] = self.lineEdit_Ref.text()
+            order_kwargs['OrderOptions'] = 1 if self.checkBox_OrderOptions.checkState() else 0
+            _condtype_index = self.comboBox_CondType.currentIndex()
+            order_kwargs['CondType'] = {0: 0, 1: 1, 2: 4,3: 0, 4: 3}[_condtype_index]
+            if _condtype_index == 0:
+                _order_type = (self.checkBox_Auction.checkState() << 1) + self.checkBox_Market.checkState()
+                order_kwargs['OrderType'] = {0: 0, 2: 6, 4: 2}[_order_type]
+                order_kwargs['Price'] = {0: self.spinBox_Price.value(), 2: 0, 4: 0x7fffffff}[_order_type]
+                order_kwargs['ValidType'] = self.comboBox_ValidType.currentIndex()
+
+                if order_kwargs['ValidType'] == 4:
+                    order_kwargs['ValidTime'] = int(dt.datetime.strptime(self.dateEdit_ValidTime.date().toPyDate().strftime('%Y/%m/%d'),
+                                                         '%Y/%m/%d').timestamp())
+                if self.checkBox_stop_tri.isChecked():
+                    order_kwargs['StopType'] = {0: 'L', 1: 'U', 2: 'D', 3: 'L'}[self.comboBox_StopType.currentIndex()]
+                    order_kwargs['StopLevel'] = self.spinBox_StopLevel.value()
+                    order_kwargs['CondType'] = 1
+                else:
+                    order_kwargs['StopLevel'] = 0
+
+            elif _condtype_index == 1:
+                order_kwargs['StopType'] = 'L'
+                order_kwargs['ValidType'] = 0
+                order_kwargs['Price'] = (self.spinBox_StopLevel2.value() + self.spinBox_toler.value()) if BuySell == 'B' \
+                    else (self.spinBox_StopLevel2.value() - self.spinBox_toler.value())
+                order_kwargs['StopLevel'] = self.spinBox_StopLevel2.value()
+                if self.checkBox_Trailing_Stop.isChecked():
+                    order_kwargs['CondType'] = 6
+
+                    if BuySell == 'B':
+                        order_kwargs['UpLevel'] = current_price.Ask[0]
+                        order_kwargs['UpPrice'] = order_kwargs['StopLevel']
+                        order_kwargs['DownLevel'] = self.spinBox_trailing_stop_step.value()
+                    else:
+                        order_kwargs['DownLevel'] = current_price.Bid[0]
+                        order_kwargs['DownPrice'] = order_kwargs['StopLevel']
+                        order_kwargs['UpLevel'] = self.spinBox_trailing_stop_step.value()
+
+            elif _condtype_index == 2:
+                order_kwargs['ValidType'] = 0
+                order_kwargs['Price'] = self.spinBox_Price.value()
+
+                if BuySell == 'B':
+                    order_kwargs['UpLevel'] = self.spinBox_oco_StopLevel.value()
+                    order_kwargs['UpPrice'] = self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()
+                else:
+                    order_kwargs['DownLevel'] = self.spinBox_oco_StopLevel.value()
+                    order_kwargs['DownPrice'] = self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()
+
+            elif _condtype_index == 3:
+                order_kwargs['ValidType'] = 0
+                _profit = self.spinBox_bullbear_profit.value()
+                _loss = self.spinBox_bullbear_loss.value()
+                _loss_toler = self.spinBox_bullbear_loss_toler.value()
+                order_kwargs['Price'] = Price = self.spinBox_Price.value()
+
+                if BuySell == 'B':
+                    order_kwargs['UpLevel'] = Price + _profit
+                    order_kwargs['UpPrice'] = Price + _profit
+                    order_kwargs['DownLevel'] = Price - _loss
+                    order_kwargs['DownPrice'] = Price - _loss - _loss_toler
+                else:
+                    order_kwargs['DownLevel'] = Price - _profit
+                    order_kwargs['DownPrice'] = Price - _profit
+                    order_kwargs['UpLevel'] = Price + _loss
+                    order_kwargs['UpPrice'] = Price + _loss + _loss_toler
+
+            elif _condtype_index == 4:
+                order_kwargs['ValidType'] = 0
+                order_kwargs['Price'] = self.spinBox_Price.value()
+                _sched_time = self.dateTimeEdit_sched_time.dateTime().toPyDateTime()
+                order_kwargs['SchedTime'] = int(_sched_time.timestamp())
+
+            cond = get_order_cond(order_kwargs)
+        except Exception as e:
+            print(e)
+            # raise e
+        else:
+            comfirm_order = ComfirmDialog(self, Cond=cond, **order_kwargs)
+
+            if self.checkBox_invalid.isChecked():
+                comfirm_order.label_subtitle.setText('新增无效指示')
+                comfirm_order.show()
+                comfirm_order.accepted.connect(lambda: add_inactive_order(**order_kwargs))
+            else:
+                comfirm_order.show()
+                comfirm_order.accepted.connect(lambda : add_order(**order_kwargs))
+
+    def oco_close(self, prodcode, net_qty, tp, sl):
+        print( prodcode, net_qty, tp, sl)
+        self.comboBox_CondType.setCurrentIndex(2)
+        self._price_flag = False
+        self._oco_sl_flag = False
+
+        if net_qty > 0:
+            self.lineEdit_ProdCode.setText(prodcode)
+            self.lineEdit_ProdCode.update()
+            self.radioButton_sell2.toggle()
+            self.spinBox_Qty.setValue(net_qty)
+            self.spinBox_Price.setValue(tp)
+            self.spinBox_oco_StopLevel.setValue(sl)
+            self.spinBox_oco_toler.setValue(5)
+            self.show()
+            self.checkBox_lock.setChecked(True)
+        elif net_qty < 0:
+            self.lineEdit_ProdCode.setText(prodcode)
+            self.lineEdit_ProdCode.update()
+            self.radioButton_buy2.toggle()
+            self.spinBox_Qty.setValue(-net_qty)
+            self.spinBox_Price.setValue(tp)
+            self.spinBox_oco_StopLevel.setValue(sl)
+            self.spinBox_oco_toler.setValue(5)
+            self.show()
+            self.checkBox_lock.setChecked(True)
+
 
     def _get_holding_pos(self, trades_info):  # 获取持仓
         prodcode = self.lineEdit_prodcode.text()
