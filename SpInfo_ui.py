@@ -2061,8 +2061,9 @@ class QQuickStoploss(QDialog, Ui_Dialog_quick_stoploss):
             raw_data = hs.get_data(self.lineEdit_prodcode.text())
             data = hs.ray(raw_data)
             if not data.empty:
-                session_holding_pos = data.ix[-1, '持仓']
-                session_net_cost = data.ix[-1, '净会话成本']
+                d = data.iloc[-1]
+                session_holding_pos = d['持仓']
+                session_net_cost = d['净会话成本']
             else:
                 raise Exception('无交易信息')
         except Exception as e:
