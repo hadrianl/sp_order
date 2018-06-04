@@ -1333,7 +1333,7 @@ class MainWindow(QtWidgets.QMainWindow):
     info_sig = pyqtSignal(str, str, int)
     def __init__(self, parent=None, *args, **kwargs):
         QtWidgets.QMainWindow.__init__(self, parent, *args, **kwargs)
-        self.resize(1161, 322)
+        self.resize(1161, 340)
         self.login_status = False
         self.handle_queue = Queue()  # 处理队列
         self.timer = QtCore.QTimer(self)
@@ -1404,6 +1404,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.login_sig.connect(self.__load_last_prodcode)
 
         self.AccInfo.price_update_sig.connect(self.OrderStoploss.update_bid_ask_table)
+
+        self.AccInfo.price_update_sig.connect(lambda p: self.statusBar().showMessage(f'系统时间:{str(dt.datetime.now().time())[0:8]}   数据时间:{str(dt.datetime.fromtimestamp(p["Timestamp"]).time())[0:8]}'))
 
 
     def bind_account(self, account_id):
@@ -1701,7 +1703,7 @@ class TimeWidget(QtWidgets.QWidget, Ui_Form_time):
         self.setWindowFlags(Qt.Qt.CoverWindow | Qt.Qt.FramelessWindowHint | Qt.Qt.WindowStaysOnBottomHint)
         self.timer = QtCore.QTimer(self)
         self.init_signal()
-        self.move((QDesktopWidget().width() -self.width()) / 2, 30)
+        self.move(0, 0)
 
     def init_signal(self):
         self.timer.timeout.connect(self.update_sys_time)
@@ -1830,6 +1832,15 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         self.spinBox_StopLevel.setSpecialValueText(' ')
         self.spinBox_StopLevel2.setSpecialValueText(' ')
         self.spinBox_oco_StopLevel.setSpecialValueText(' ')
+        self.price_items = []
+        self.qty_items = []
+        for i in range(10):
+            pitem = QTableWidgetItem('')
+            qitem = QTableWidgetItem('')
+            self.tableWidget_bid_ask.setItem(i, 0, pitem)
+            self.tableWidget_bid_ask.setItem(i, 1, qitem)
+            self.price_items.append(pitem)
+            self.qty_items.append(qitem)
         self._price_flag = True
         self._sl_flag = True
         self._sl2_flag = True
@@ -1902,26 +1913,25 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         self.pushButton_del_short_sl.released.connect(self.del_short_sl)
         self.pushButton_del_remain_sl.released.connect(self.del_remain_sl)
         self.groupBox_price.toggled.connect(lambda b: self.resize(510, 700) if b else self.resize(510, 350))
-
+        self.tableWidget_bid_ask.itemDoubleClicked.connect(lambda item: self.spinBox_Price.setValue(int(float(item.text()))) if item.column() ==  0 else ...)
 
     def update_bid_ask_table(self, price):
         if self.tableWidget_bid_ask.isEnabled() and price['ProdCode'].decode() == self.lineEdit_ProdCode.text():
-            for i, (b, bq) in enumerate(zip(price['Bid'], price['BidQty'])):
-                bid_item = QTableWidgetItem(str(b))
-                bid_qty_item = QTableWidgetItem(str(bq))
+            for i, (b, bq) in enumerate(zip(price['Bid'][0:5], price['BidQty'][0:5])):
+                bid_item = self.price_items[5 + i]
+                bid_qty_item = self.qty_items[5 + i]
                 bid_item.setForeground(QColor('#FF0000'))
                 bid_qty_item.setBackground(QColor('#FF0000') if bq >= 10 else QColor('#FFFFFF'))
+                bid_item.setText(str(b))
+                bid_qty_item.setText(str(bq))
 
-                self.tableWidget_bid_ask.setItem(5 + i, 0, bid_item)
-                self.tableWidget_bid_ask.setItem(5 + i, 1, bid_qty_item)
-
-            for i, (a, aq) in enumerate(zip(price['Ask'], price['AskQty'])):
-                ask_item = QTableWidgetItem(str(a))
-                ask_qty_item = QTableWidgetItem(str(aq))
+            for i, (a, aq) in enumerate(zip(price['Ask'][0:5], price['AskQty'][0:5])):
+                ask_item = self.price_items[4 - i]
+                ask_qty_item = self.qty_items[4 -i]
                 ask_item.setForeground(QColor('#00FF00'))
                 ask_qty_item.setBackground(QColor('#00FF00') if aq >= 10 else QColor('#FFFFFF'))
-                self.tableWidget_bid_ask.setItem(4 - i, 0, ask_item)
-                self.tableWidget_bid_ask.setItem(4 - i, 1, ask_qty_item)
+                ask_item.setText(str(a))
+                ask_qty_item.setText(str(aq))
 
             self.tableWidget_bid_ask.viewport().update()
 
