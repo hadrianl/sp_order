@@ -5,8 +5,9 @@
 # @File    : Spfunc.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 
-from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QColor, QFont, QMessageBox,pyqtSignal, QTableWidgetItem, QHeaderView, QModelIndex, QBrush
+from PyQt5.Qt import QDialog, QDesktopWidget, QTableWidget, QIcon, QColor, QFont, QMessageBox,pyqtSignal, QTableWidgetItem, QHeaderView
 from PyQt5 import QtWidgets, QtCore, QtGui, Qt, QtSql
+
 from ui.order_dialog import Ui_Dialog_order
 from ui.acc_info import Ui_Form_acc_info
 from ui.sp_login import Ui_Dialog_sp_login
@@ -93,9 +94,6 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_acc_info.__init__(self)
         self.setupUi(self)
-        # desktop = QDesktopWidget()
-        # self.move(desktop.width() - self.width(), (desktop.height() + self.height()) / 2)
-        self.setWindowFlags(Qt.Qt.Window)
         self.time = TimeWidget(self)
         self.message = QMessageBox(self)
         self.message.setModal(True)
@@ -1335,6 +1333,7 @@ class MainWindow(QtWidgets.QMainWindow):
     info_sig = pyqtSignal(str, str, int)
     def __init__(self, parent=None, *args, **kwargs):
         QtWidgets.QMainWindow.__init__(self, parent, *args, **kwargs)
+        self.resize(1161, 322)
         self.login_status = False
         self.handle_queue = Queue()  # 处理队列
         self.timer = QtCore.QTimer(self)
@@ -1352,11 +1351,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.var_test = QTest(self)
         self.init_signal()
         self.init_callback()  # 初始化回调函数
-        # self.setWindowFlags(Qt.Qt.WindowStaysOnBottomHint)
+
 
     def init_signal(self):
         self.info_sig.connect(self.popup)  # inof_sig连接消息的popup
-        self.login_sig.connect(self.showMinimized)
+        self.login_sig.connect(self.show)
         self.login_sig.connect(self.AccInfo.show)
         self.login_sig.connect(lambda: self.Login.close())
         self.login_sig.connect(self.trayicon.show)
@@ -1377,8 +1376,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.AccInfo.price_update_sig.connect(self.QuickOrder.price_table_update)
         self.AccInfo.price_update_sig.connect(self.QuickOrder.price_info_update)
         self.AccInfo.price_update_sig.connect(self.QuickOrder.holding_profit)
-        self.AccInfo.pushButton_Order_Stoploss.toggled.connect(self.OrderStoploss.setVisible)
-        self.AccInfo.pushButton_QuickOrder.toggled.connect(self.QuickOrder.setVisible)
+        self.AccInfo.pushButton_Order_Stoploss.released.connect(self.OrderStoploss.show)
+        self.AccInfo.pushButton_QuickOrder.released.connect(self.QuickOrder.show)
         self.OrderStoploss.lineEdit_ProdCode.textChanged.connect(lambda text: [self.QuickOrder.lineEdit_ProdCode.setText(text), self.OrderAssistant.lineEdit_ProdCode.setText(text), self.OrderStoploss.lineEdit_prodcode.setText(text)])  # 普通下单与快速下单的代码输入绑定
         self.QuickOrder.lineEdit_ProdCode.textChanged.connect(lambda text: [self.OrderStoploss.lineEdit_ProdCode.setText(text), self.OrderAssistant.lineEdit_ProdCode.setText(text), self.OrderStoploss.lineEdit_prodcode.setText(text)])  # 普通下单与快速下单的代码输入绑定
 
@@ -1389,11 +1388,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.QuickOrder.checkBox_Lock.toggled.connect(
             lambda b: self.QuickOrder.position_takeprofit_info_update(self.AccInfo.data.Trade) if b else ...)
 
-        self.trayicon.action_accinfo.toggled.connect(lambda b: [self.AccInfo.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint), self.AccInfo.show()] if b else [self.AccInfo.setWindowFlags(Qt.Qt.Window), self.AccInfo.hide()])
+        self.trayicon.action_accinfo.toggled.connect(lambda b: [self.setWindowFlags(Qt.Qt.WindowStaysOnTopHint), self.show()] if b else [self.setWindowFlags(Qt.Qt.Window), self.hide()])
         self.trayicon.action_order_stoploss.toggled.connect(lambda b: self.OrderStoploss.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint)if b else self.OrderStoploss.setWindowFlags(Qt.Qt.Window))
         self.trayicon.action_quickorder.toggled.connect(lambda b: self.QuickOrder.setWindowFlags(Qt.Qt.Window | Qt.Qt.WindowStaysOnTopHint) if b else self.QuickOrder.setWindowFlags(Qt.Qt.Window))
-        self.trayicon.action_order_stoploss.toggled.connect(self.AccInfo.pushButton_Order_Stoploss.setChecked)
-        self.trayicon.action_quickorder.toggled.connect(self.AccInfo.pushButton_QuickOrder.setChecked)
+        # self.trayicon.action_order_stoploss.toggled.connect(self.AccInfo.pushButton_Order_Stoploss.setChecked)
+        # self.trayicon.action_quickorder.toggled.connect(self.AccInfo.pushButton_QuickOrder.setChecked)
 
         self.OrderStoploss.checkBox_order_assistant.toggled.connect(self.OrderAssistant.setVisible)
         self.OrderStoploss.moveEvent = lambda a0: self.OrderAssistant.move(a0.pos().x() + self.OrderStoploss.width(), a0.pos().y())
