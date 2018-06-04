@@ -1411,20 +1411,32 @@ class MainWindow(QtWidgets.QMainWindow):
         self.OrderStoploss.comboBox_account.addItem(account_id)
 
     def save_trade_info(self):
-        trades = get_all_trades_by_array()
-        trades_info = []
-        for t in trades:
-            trade_dict = {}
-            for name, c_type in t._fields_:
-                v = getattr(t, name)
-                v = v if not isinstance(v, bytes) else v.decode()
-                trade_dict[name] = v
-            trades_info.append(trade_dict)
+        try:
+            conn = pm.connect(host='192.168.2.226', port=3306, user='kairuitouzi', passwd='kairuitouzi', db='carry_investment')
+            cursor = conn.cursor()
+            trades = get_all_trades_by_array()
+            # trades_info = []
+            for t in trades:
+                trade_dict = {}
+                for name, c_type in t._fields_:
+                    v = getattr(t, name)
+                    v = v if not isinstance(v, bytes) else v.decode()
+                    trade_dict[name] = v
+                    values = ','.join(['"' + str(v) + '"' for v in trade_dict.values()])
+                sql = f'insert into sp_trade_records values({values})'
+                print(sql)
+                cursor.execute(sql)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(e)
 
-        writer = pd.ExcelWriter('交易记录.xlsx')
-        df = pd.DataFrame(trades_info)
-        df.to_excel(writer,f'{dt.datetime.now().date()}', index=False)
-        writer.save()
+            # trades_info.append(trade_dict)
+
+        # writer = pd.ExcelWriter('交易记录.xlsx')
+        # df = pd.DataFrame(trades_info)
+        # df.to_excel(writer,f'{dt.datetime.now().date()}', index=False)
+        # writer.save()
 
 
     def init_spapi(self):  # 初始化SPAPI并登录
