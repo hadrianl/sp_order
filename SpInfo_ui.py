@@ -1827,6 +1827,8 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         self.holding_pos = []
         self.session_pos = []
         self.all_pos = []
+        self.tableWidget_bid_ask.setVisible(False)
+        self.resize(510, 350)
         # desktop = QDesktopWidget()
         # self.move(desktop.width() - self.width(),(desktop.height() - self.height())/2 - 70)
 
@@ -1888,10 +1890,11 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         self.pushButton_del_long_sl.released.connect(self.del_long_sl)
         self.pushButton_del_short_sl.released.connect(self.del_short_sl)
         self.pushButton_del_remain_sl.released.connect(self.del_remain_sl)
+        self.groupBox_price.toggled.connect(lambda b: self.resize(510, 700) if b else self.resize(510, 350))
 
 
     def update_bid_ask_table(self, price):
-        if price['ProdCode'].decode() == self.lineEdit_ProdCode.text():
+        if self.tableWidget_bid_ask.isEnabled() and price['ProdCode'].decode() == self.lineEdit_ProdCode.text():
             for i, (b, bq) in enumerate(zip(price['Bid'], price['BidQty'])):
                 bid_item = QTableWidgetItem(str(b))
                 bid_qty_item = QTableWidgetItem(str(bq))
@@ -2039,7 +2042,7 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         pos = get_pos_by_product(prodcode)
         if pos.Qty != 0:
             qty = pos.Qty if pos.LongShort == b'B' else -pos.Qty
-            price = pos.TotalAmt  / qty
+            price = pos.TotalAmt  / abs(qty)
             remain_pos = {'TradeTime': 0, 'Qty': qty, 'Price': price}
             current_trades.append(remain_pos)
         print(current_trades)
