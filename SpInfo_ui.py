@@ -1910,13 +1910,16 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
             for i, (b, bq) in enumerate(zip(price['Bid'], price['BidQty'])):
                 bid_item = QTableWidgetItem(str(b))
                 bid_qty_item = QTableWidgetItem(str(bq))
+                bid_item.setForeground(QColor('#FF0000'))
                 bid_qty_item.setBackground(QColor('#FF0000') if bq >= 10 else QColor('#FFFFFF'))
+
                 self.tableWidget_bid_ask.setItem(5 + i, 0, bid_item)
                 self.tableWidget_bid_ask.setItem(5 + i, 1, bid_qty_item)
 
             for i, (a, aq) in enumerate(zip(price['Ask'], price['AskQty'])):
                 ask_item = QTableWidgetItem(str(a))
                 ask_qty_item = QTableWidgetItem(str(aq))
+                ask_item.setForeground(QColor('#00FF00'))
                 ask_qty_item.setBackground(QColor('#00FF00') if aq >= 10 else QColor('#FFFFFF'))
                 self.tableWidget_bid_ask.setItem(4 - i, 0, ask_item)
                 self.tableWidget_bid_ask.setItem(4 - i, 1, ask_qty_item)

@@ -7,10 +7,17 @@ import datetime as dt
 
 class HS:
     def __init__(self):
-        self.sxf = 33.54
-    @staticmethod
-    def get_data(prodcode):
+        self.sxf = 0
+        self.leverage = 1
+    def get_data(self, prodcode):
         dd = []
+        if 'HSI' in prodcode:
+            self.sxf = 33.54
+            self.leverage = 50
+        elif 'MHI' in prodcode:
+            self.sxf = 13.60
+            self.leverage = 10
+
         all_trades = get_all_trades_by_array()
         trades = [t for t in all_trades if t.ProdCode.decode() == prodcode]
         for t in trades:
@@ -140,19 +147,19 @@ class HS:
             pjyl = round(data['all'] / data['wcds'], 2) if data['wcds'] > 0 else 0  # 平均盈利
             huihuapj = round(data['pcyl_all'] / data['wcds1'], 2) if data['wcds1'] > 0 else 0  # 会话平均盈利
             zcb = round(data['sum_price'] / data['jy'], 2) if data['jy'] != 0 else round(data['sum_price'], 2)  # 持仓成本
-            jzcbs = (data['wcds'] + abs(data['jy'])) * self.sxf * 2 / 50 / data['jy'] if data[
+            jzcbs = (data['wcds'] + abs(data['jy'])) * self.sxf * 2 / self.leverage / data['jy'] if data[
                                                                                         'jy'] != 0 else 0  # SXF * 2 / 50 * data['jy']
             jzcb = (data['sum_price'] / data['jy'] + jzcbs) if data['jy'] != 0 else 0  # 净持仓成本
             jzcb = int(jzcb) + 1 if jzcb > int(jzcb) else int(jzcb)
 
-            jlr = round(data['all'] * 50 - self.sxf * data['all_jy_add'], 2)  # 净利润
+            jlr = round(data['all'] * self.leverage - self.sxf * data['all_jy_add'], 2)  # 净利润
             jpjlr = round(jlr / data['wcds'], 2) if data['wcds'] > 0 else 0  # 净平均利润
 
             if ind != is_ind or (ind == is_ind and data['jy'] == 0):
                 res.append(
                     [data['time'], msg[0], pri, data['jy'], yscb, cb, jcb, cbyl, data['pcyl_all'], data['all'], pjyl,
                      huihuapj, zcb, jzcb,
-                     data['all'] * 50, jlr, jpjlr, round(self.sxf * data['all_jy_add'], 2), data['wcds'], data['dbs']])
+                     data['all'] * self.leverage, jlr, jpjlr, round(self.sxf * data['all_jy_add'], 2), data['wcds'], data['dbs']])
                 cbyl = 0
             data['dbs'] += 1 if data['jy'] == 0 else 0  # 序号
             is_ind = ind
