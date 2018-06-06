@@ -1424,7 +1424,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     v = v if not isinstance(v, bytes) else v.decode()
                     trade_dict[name] = v
                     values = ','.join(['"' + str(v) + '"' for v in trade_dict.values()])
-                sql = f'insert into sp_trade_records values({values})'
+                sql = f'replace into sp_trade_records values({values})'
                 print(sql)
                 cursor.execute(sql)
             conn.commit()
