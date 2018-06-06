@@ -1335,6 +1335,7 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QMainWindow.__init__(self, parent, *args, **kwargs)
         self.resize(1161, 340)
         self.login_status = False
+        self._init_done = False
         self.handle_queue = Queue()  # 处理队列
         self.timer = QtCore.QTimer(self)
         self.wechat_info = QWechatInfo(self)  # 微信推送类
@@ -1361,9 +1362,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.login_sig.connect(self.trayicon.show)
         self.AccInfo.checkBox_follow_orders.toggled.connect(
             lambda b: self.init_order_follower() if b else self.deinit_order_follower())  # 绑定跟单的checkbox可以初始化与反初始化跟单
-        self.login_sig.connect(lambda: [self.AccInfo.refresh_accbals(), self.AccInfo.refresh_ccy_rate()])  # 登录时更新结余和汇率
         self.login_sig.connect(
-            lambda: self.timer.singleShot(3000, lambda: [subscribe_price(p, 1) for p in self.AccInfo.data.sub_list]))  # 登录3秒后会自动订阅sublist的价格，sublist通过持仓的回调函数添加产品代码
+            lambda: self.timer.singleShot(3000, lambda :[[subscribe_price(p, 1) for p in self.AccInfo.data.sub_list],
+                                                         setattr(self, '_init_done', True),
+                                                         self.AccInfo.refresh_accbals(),
+                                                         self.AccInfo.refresh_ccy_rate()]))  # 登录三秒后执行登陆后的处理函数
+
         self.AccInfo.pushButton_mt4_order.released.connect(self.init_sql_table)  # 按钮test的测试
         self.AccInfo.pushButton_tradesession.released.connect(self.init_tradesession_table)  # 交易会话
         self.AccInfo.checkBox_wechat_info.clicked.connect(
@@ -1650,14 +1654,15 @@ class MainWindow(QtWidgets.QMainWindow):
             info_handle('<成交>',
                         f'{rec_no}新成交{trade.OpenClose.decode()}--@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}',
                         0, AccInfo._refresh_trade, trade)
-            info = f"""
-            编号:{trade.RecNO}\n
-            代码:{trade.ProdCode.decode()}\n
-            方向:{dict(B='买入', S='沽出').get(trade.BuySell.decode(), '')}\n
-            价格:{trade.AvgPrice}\n
-            数量:{trade.Qty}\n
-            参考:{trade.Ref.decode()}"""
-            self.handle_queue.put([AccInfo.info_sig.emit, ('<INFO>新成交', info), {}])
+            if self._init_done:
+                info = f"""
+                编号:{trade.RecNO}\n
+                代码:{trade.ProdCode.decode()}\n
+                方向:{dict(B='买入', S='沽出').get(trade.BuySell.decode(), '')}\n
+                价格:{trade.AvgPrice}\n
+                数量:{trade.Qty}\n
+                参考:{trade.Ref.decode()}"""
+                self.handle_queue.put([AccInfo.info_sig.emit, ('<INFO>新成交', info), {}])
 
         @on_updated_account_position_push  # 新持仓信息
         def updated_account_position_push(pos):
