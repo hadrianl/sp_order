@@ -320,7 +320,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
             self.tableWidget_orders.setItem(r, i, QTableWidgetItem(s))
         self.tableWidget_orders.viewport().update()
 
-        if order_dict['Status'] in [10]:
+        if order_dict['Status'] in [9, 10]:
             self.tableWidget_orders.removeRow(r)
 
         if order_dict['Status'] not in [0, 4, 5, 6, 7]:
