@@ -352,7 +352,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         r = 0
 
         for i in range(self.tableWidget_pos.rowCount()):
-            if pos_dict['ProdCode'] == self.tableWidget_pos.item(i, 0).text():
+            if pos_dict['ProdCode'].decode() == self.tableWidget_pos.item(i, 0).text():
                 r = i
                 break
         else:
@@ -1634,7 +1634,8 @@ class MainWindow(QtWidgets.QMainWindow):
             方向:{dict(B='买入', S='沽出').get(order.BuySell.decode(), '')}\n
             价格:{order.Price}\n
             数量:{order.Qty}\n
-            条件:{cond}"""
+            条件:{cond}\n
+            参考:{order.Ref.decode()}"""
             info_handle('<订单>',
                         f'即将发送请求--@{order.ProdCode.decode()}-Price:{order.Price}-Qty:{order.Qty}-BuySell:{order.BuySell.decode()}',
                         0, AccInfo.info_sig.emit, 'INFO-Order Before Send', info)
@@ -1649,6 +1650,14 @@ class MainWindow(QtWidgets.QMainWindow):
             info_handle('<成交>',
                         f'{rec_no}新成交{trade.OpenClose.decode()}--@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}',
                         0, AccInfo._refresh_trade, trade)
+            info = f"""
+            编号:{trade.RecNO}\n
+            代码:{trade.ProdCode.decode()}\n
+            方向:{dict(B='买入', S='沽出').get(trade.BuySell.decode(), '')}\n
+            价格:{trade.AvgPrice}\n
+            数量:{trade.Qty}\n
+            参考:{trade.Ref.decode()}"""
+            self.handle_queue.put([AccInfo.info_sig.emit, ('<INFO>新成交', info), {}])
 
         @on_updated_account_position_push  # 新持仓信息
         def updated_account_position_push(pos):
@@ -2063,15 +2072,13 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         prodcode = self.lineEdit_prodcode.text()
         current_trades = [{'TradeTime': trade['TradeTime'], 'Qty': trade['Qty'] if trade['BuySell'] == b'B' else -trade['Qty'], 'Price': trade['AvgPrice']} for Id, trade in trades_info.items() if trade['ProdCode'].decode('GBK') == prodcode]
 
-        pos = get_pos_by_product(prodcode)
-        if pos.Qty != 0:
-            qty = pos.Qty if pos.LongShort == b'B' else -pos.Qty
-            price = pos.TotalAmt  / abs(qty)
-            remain_pos = {'TradeTime': 0, 'Qty': qty, 'Price': price}
-            current_trades.append(remain_pos)
-        print(current_trades)
-        current_trades.sort(key=lambda x:x['TradeTime'])
-        print(current_trades)
+        # pos = get_pos_by_product(prodcode)
+        # if pos.Qty != 0:
+        #     qty = pos.Qty if pos.LongShort == b'B' else -pos.Qty
+        #     price = pos.TotalAmt  / abs(qty)
+        #     remain_pos = {'TradeTime': 0, 'Qty': qty, 'Price': price}
+        #     current_trades.append(remain_pos)
+        # current_trades.sort(key=lambda x:x['TradeTime'])
 
         holding_pos = [0 , 0]
         for t in current_trades:
