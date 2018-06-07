@@ -16,6 +16,7 @@ from ui.order_comfirm_dialog import Ui_Dialog_order_comfirm
 from ui.close_position_dialog import Ui_Dialog_close_position
 from ui.quick_stoploss_dialog import Ui_Dialog_quick_stoploss
 from ui.order_stoploss_dialog import Ui_Dialog_order_stoploss
+from ui.change_order_dialog import Ui_Dialog_change_order
 from baseitems import QPubOrder, QSubOrder, QWechatInfo
 from ui.order_assistant_widget import Ui_Form_OrderAssistant
 from ui.time_widget import Ui_Form_time
@@ -35,7 +36,7 @@ import pymysql as pm
 import pandas as pd
 from extra.calc import HS
 
-class QSqlTable(QtWidgets.QTableView):
+class QMT4OrderTable(QtWidgets.QTableView):
     class QDataModel(QtSql.QSqlTableModel):
         def __init__(self, parent=None, db=None):
             QtSql.QSqlTableModel.__init__(self, parent, db)
@@ -57,7 +58,6 @@ class QSqlTable(QtWidgets.QTableView):
 
             return QtSql.QSqlTableModel.data(self, index, role)
 
-
     def __init__(self, table='order_detail'):
         QtWidgets.QTableView.__init__(self, None)
         # self.setWindowFlags(Qt.Qt.Window)
@@ -73,6 +73,33 @@ class QSqlTable(QtWidgets.QTableView):
             self._model.setTable(table)
             self._model.select()
             self._model.sort(3, Qt.Qt.DescendingOrder)
+            self.setModel(self._model)
+            self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+            self.verticalHeader().hide()
+            self.resize(800, 500)
+            self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+            self.show()
+        else:
+            raise Exception(self._db.lastError().text())
+
+class QSQLTable(QtWidgets.QTableView):
+    def __init__(self, accNo, table='sp_trade'):
+        QtWidgets.QTableView.__init__(self, None)
+        # self.setWindowFlags(Qt.Qt.Window)
+        self.setWindowTitle(table)
+        self._db= QtSql.QSqlDatabase.addDatabase('QMYSQL')
+        self._db.setHostName('192.168.2.226')
+        self._db.setPort(3306)
+        self._db.setUserName('kairuitouzi')
+        self._db.setPassword('kairuitouzi')
+        self._db.setDatabaseName('carry_investment')
+        if self._db.open():
+            self._model = QtSql.QSqlTableModel(self, self._db)
+            self._model.setTable(table)
+            self._model.setFilter(f'账户="{accNo}"')
+            print(f'账户="{accNo}"')
+            self._model.select()
+            # self._model.sort(3, Qt.Qt.DescendingOrder)
             self.setModel(self._model)
             self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
             self.verticalHeader().hide()
@@ -124,6 +151,12 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         self.toolButton_update_info.released.connect(lambda: [func() for func in self.info_update])
 
         self.pushButton_close_order.mouseReleaseEvent = lambda e:self._close_position(e)
+
+        self.tableWidget_orders.doubleClicked.connect(lambda m: self.changeorder(self.tableWidget_orders.item(m.row(), 0).text()))
+
+    def changeorder(self, order_no):
+        changorder_dialog = ChangeOrderDialog(self)
+        changorder_dialog.init_order(int(order_no))
 
     def update_pos_info(self, price_dict):  # 根据price来更新持仓盈亏等
         for t in range(self.tableWidget_pos.rowCount()):
@@ -884,6 +917,114 @@ class QuickOrderDialog(QtWidgets.QDialog, Ui_Dialog_quick_order):  # 快速下�
     #     self.parent().AccInfo.pushButton_QuickOrder.setChecked(False)
     #     a0.accept()
 
+class ChangeOrderDialog(QDialog, Ui_Dialog_change_order):
+    def __init__(self, parent=None):
+        QDialog.__init__(self, parent)
+        Ui_Dialog_change_order.__init__(self)
+        self.setupUi(self)
+        self.show()
+
+    def init_order(self, accOrderNo):
+        def changorder():
+            order.Price = self.spinBox_Price.value()
+            order.Qty = self.spinBox_Qty.value()
+            if order.Price == org_price and order.Qty == org_qty:
+                QMessageBox.warning(self, '<WARNING>更新订单', '未做任何更改')
+                return
+
+            if order.CondType == 0:
+                order.Price = self.spinBox_Price.value()
+                order.Qty = self.spinBox_Qty.value()
+                order.ValidType = self.comboBox_ValidType.currentIndex()
+            elif order.CondType == 1:
+                order.Price = self.spinBox_StopLevel2.value() + self.spinBox_toler.value() if order.BuySell == b'B' else self.spinBox_StopLevel2.value() - self.spinBox_toler.value()
+                order.StopLevel = self.spinBox_StopLevel2.value()
+            elif order.CondType == 6:
+                order.StopLevel = self.spinBox_StopLevel2.value()
+                if order.BuySell == b'B':
+                    order.Price = self.spinBox_StopLevel2.value() + self.spinBox_toler.value()
+                    order.DownLevel = self.spinBox_trailing_stop_step.value()
+                elif order.BuySell == b'S':
+                    order.Price = self.spinBox_StopLevel2.value() - self.spinBox_toler.value()
+                    order.UpLevel = self.spinBox_trailing_stop_step.value()
+            elif order.CondType == 4:
+                order.Price = self.spinBox_Price.value()
+                if order.BuySell == b'B':
+                    order.UpLevel = self.spinBox_oco_StopLevel.value()
+                    order.UpPrice = self.spinBox_oco_StopLevel.value() + self.spinBox_oco_toler.value()
+                elif order.BuySell ==b'S':
+                    order.DownLevel = self.spinBox_oco_StopLevel.value()
+                    order.DownLevel = self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()
+
+            change_order(order, org_price, org_qty)
+            self.accept()
+
+        try:
+            order = get_order_by_orderNo(accOrderNo)
+            org_price = order.Price
+            org_qty = order.Qty
+            self.lineEdit_ProdCode.setText(order.ProdCode.decode())
+            self.spinBox_Price.setValue(org_price)
+            self.spinBox_Qty.setValue(org_qty)
+            if order.BuySell == b'B':
+                self.pushButton_buy.setEnabled(True)
+                self.pushButton_buy.released.connect(lambda: changorder())
+                self.radioButton_buy1.setChecked(True)
+            elif order.BuySell == b'S':
+                self.pushButton_sell.setEnabled(True)
+                self.pushButton_sell.released.connect(lambda: changorder())
+                self.radioButton_sell1.setChecked(True)
+
+            if order.CondType == 0:
+                self.comboBox_CondType.setCurrentIndex(0)
+                self.comboBox_ValidType.setCurrentIndex(order.ValidType)
+                self.spinBox_Price.setEnabled(True)
+                self.spinBox_Qty.setEnabled(True)
+            elif order.CondType == 1:
+                self.comboBox_CondType.setCurrentIndex(1)
+                self.spinBox_StopLevel2.setEnabled(True)
+                self.spinBox_StopLevel2.setValue(order.StopLevel)
+                self.spinBox_toler.setEnabled(True)
+                if order.BuySell == b'B':
+                    self.spinBox_toler.setValue(org_price - order.StopLevel)
+                    self.spinBox_StopLevel2.valueChanged.connect(lambda x: self.spinBox_Price.setValue(x + self.spinBox_toler.value()))
+                    self.spinBox_toler.valueChanged.connect(lambda x: self.spinBox_Price.setValue(self.spinBox_StopLevel2.value() + x))
+                elif order.BuySell == b'S':
+                    self.spinBox_toler.setValue(order.StopLevel - org_price)
+                    self.spinBox_StopLevel2.valueChanged.connect(
+                        lambda x: self.spinBox_Price.setValue(x - self.spinBox_toler.value()))
+                    self.spinBox_toler.valueChanged.connect(
+                        lambda x: self.spinBox_Price.setValue(self.spinBox_StopLevel2.value() - x))
+            elif order.CondType == 6:
+                self.comboBox_CondType.setCurrentIndex(1)
+                self.spinBox_StopLevel2.setEnabled(True)
+                self.spinBox_StopLevel2.setValue(order.StopLevel)
+                self.spinBox_toler.setEnabled(True)
+                self.checkBox_Trailing_Stop.setEnabled(True)
+                if order.BuySell == b'B':
+                    self.spinBox_toler.setValue(org_price - order.StopLevel)
+                    self.spinBox_trailing_stop_step.setValue(order.DownLevel)
+                elif order.BuySell == b'S':
+                    self.spinBox_toler.setValue(order.StopLevel - org_price)
+                    self.spinBox_trailing_stop_step.setValue(order.UpLevel)
+            elif order.CondType == 4:
+                self.comboBox_CondType.setCurrentIndex(2)
+                self.spinBox_Price.setEnabled(True)
+                self.spinBox_oco_StopLevel.setEnabled(True)
+                self.spinBox_oco_toler.setEnabled(True)
+                self.spinBox_Price.setValue(order.Price)
+                if order.BuySell == b'B':
+                    self.spinBox_oco_StopLevel.setValue(order.UpLevel)
+                    self.spinBox_oco_toler.setValue(order.UpPrice - order.UpLevel)
+                elif order.BuySell == b'S':
+                    self.spinBox_oco_StopLevel.setValue(order.DownLevel)
+                    self.spinBox_oco_toler.setValue(order.DownLevel - order.DownPrice)
+            else: ...
+
+        except Exception as e:
+            print(e)
+
+
 
 class OrderAssistantWidget(QtWidgets.QWidget, Ui_Form_OrderAssistant):
     oco_close_sig = pyqtSignal(str, int, float, float)
@@ -1368,7 +1509,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                                          self.AccInfo.refresh_accbals(),
                                                          self.AccInfo.refresh_ccy_rate()]))  # 登录三秒后执行登陆后的处理函数
 
-        self.AccInfo.pushButton_mt4_order.released.connect(self.init_sql_table)  # 按钮test的测试
+        self.AccInfo.pushButton_mt4_order.released.connect(self.init_mt4_table)  # 按钮test的测试
         self.AccInfo.pushButton_tradesession.released.connect(self.init_tradesession_table)  # 交易会话
         self.AccInfo.checkBox_wechat_info.clicked.connect(
             lambda b: self.init_wechat_info() if b else self.deinit_wechat_info())  # 微信消息推送的初始化与反初始化
@@ -1410,10 +1551,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.AccInfo.price_update_sig.connect(self.OrderStoploss.update_bid_ask_table)
 
         self.AccInfo.price_update_sig.connect(lambda p: self.statusBar().showMessage(f'系统时间:{str(dt.datetime.now().time())[0:8]}   数据时间:{str(dt.datetime.fromtimestamp(p["Timestamp"]).time())[0:8]}'))
-
+        self.AccInfo.pushButton_trade_history.released.connect(lambda :self.init_trade_history())
 
     def bind_account(self, account_id):
         self.OrderStoploss.comboBox_account.addItem(account_id)
+        self.accNo = account_id
 
     def save_trade_info(self):
         try:
@@ -1501,11 +1643,17 @@ class MainWindow(QtWidgets.QMainWindow):
     def deinit_wechat_info(self):
         self.wechat_info.close()
 
-    def init_sql_table(self):
+    def init_trade_history(self):
         try:
-            self.sql_table = QSqlTable('order_detail')
+            self.trade_table = QSQLTable(self.accNo, 'sp_trade')
         except Exception as e:
-            QMessageBox.critical(self, 'CRITICAL-SQLTable初始化', f'错误:{e}')
+            QMessageBox.critical(self, 'CRITICAL-QSQLTable初始化', f'错误:{e}')
+
+    def init_mt4_table(self):
+        try:
+            self.sql_table = QMT4OrderTable('order_detail')
+        except Exception as e:
+            QMessageBox.critical(self, 'CRITICAL-MT4OrderTable初始化', f'错误:{e}')
 
     def init_tradesession_table(self):
         try:
