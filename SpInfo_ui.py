@@ -121,7 +121,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         QtWidgets.QWidget.__init__(self, parent)
         Ui_Form_acc_info.__init__(self)
         self.setupUi(self)
-        self.time = TimeWidget(self)
+        # self.time = TimeWidget(self)
         self.message = QMessageBox(self)
         self.message.setModal(True)
         self.data = QData(self)
@@ -926,16 +926,18 @@ class ChangeOrderDialog(QDialog, Ui_Dialog_change_order):
 
     def init_order(self, accOrderNo):
         def changorder():
-            order.Price = self.spinBox_Price.value()
-            order.Qty = self.spinBox_Qty.value()
-            if order.Price == org_price and order.Qty == org_qty:
-                QMessageBox.warning(self, '<WARNING>更新订单', '未做任何更改')
-                return
+            # new_order = SPApiOrder()
+            # order.Price = self.spinBox_Price.value()
+            # order.Qty = self.spinBox_Qty.value()
+            # if order.Price == org_price and order.Qty == org_qty:
+            #     QMessageBox.warning(self, '<WARNING>更新订单', '未做任何更改')
+            #     return
 
             if order.CondType == 0:
                 order.Price = self.spinBox_Price.value()
                 order.Qty = self.spinBox_Qty.value()
-                order.ValidType = self.comboBox_ValidType.currentIndex()
+                order.ValidType = int(self.comboBox_ValidType.currentIndex())
+                order.Ref = self.lineEdit_Ref.text().encode()
             elif order.CondType == 1:
                 order.Price = self.spinBox_StopLevel2.value() + self.spinBox_toler.value() if order.BuySell == b'B' else self.spinBox_StopLevel2.value() - self.spinBox_toler.value()
                 order.StopLevel = self.spinBox_StopLevel2.value()
@@ -956,7 +958,8 @@ class ChangeOrderDialog(QDialog, Ui_Dialog_change_order):
                     order.DownLevel = self.spinBox_oco_StopLevel.value()
                     order.DownLevel = self.spinBox_oco_StopLevel.value() - self.spinBox_oco_toler.value()
 
-            change_order(order, org_price, org_qty)
+            # change_order(order, org_price, org_qty)
+            change_order_by(order.IntOrderNo, org_price, org_qty, order.Price, order.Qty)
             self.accept()
 
         try:
@@ -978,6 +981,7 @@ class ChangeOrderDialog(QDialog, Ui_Dialog_change_order):
             if order.CondType == 0:
                 self.comboBox_CondType.setCurrentIndex(0)
                 self.comboBox_ValidType.setCurrentIndex(order.ValidType)
+                self.comboBox_ValidType.setEnabled(True)
                 self.spinBox_Price.setEnabled(True)
                 self.spinBox_Qty.setEnabled(True)
             elif order.CondType == 1:
@@ -1000,7 +1004,7 @@ class ChangeOrderDialog(QDialog, Ui_Dialog_change_order):
                 self.spinBox_StopLevel2.setEnabled(True)
                 self.spinBox_StopLevel2.setValue(order.StopLevel)
                 self.spinBox_toler.setEnabled(True)
-                self.checkBox_Trailing_Stop.setEnabled(True)
+                self.checkBox_Trailing_Stop.setChecked(True)
                 if order.BuySell == b'B':
                     self.spinBox_toler.setValue(org_price - order.StopLevel)
                     self.spinBox_trailing_stop_step.setValue(order.DownLevel)
@@ -1516,7 +1520,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.wechat_info.login_sig.connect(self.AccInfo.checkBox_wechat_info.setChecked)  # 微信登入信号为checkbox设置checked
         self.wechat_info.finished.connect(lambda: self.AccInfo.checkBox_wechat_info.setChecked(False))  # 微信消息推送的线程结束后，取消checkbox的checked
         self.Login.pushButton_login.released.connect(lambda: self.init_spapi())  # 登录按钮触发init_spapi
-        self.login_sig.connect(self.AccInfo.time.show)
+        # self.login_sig.connect(self.AccInfo.time.show)
 
         self.AccInfo.price_update_sig.connect(self.QuickOrder.price_table_update)
         self.AccInfo.price_update_sig.connect(self.QuickOrder.price_info_update)
