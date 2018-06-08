@@ -159,6 +159,9 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         changorder_dialog.init_order(int(order_no))
 
     def update_pos_info(self, price_dict):  # 根据price来更新持仓盈亏等
+        if price_dict['Last'][0] == 0:
+            return
+
         for t in range(self.tableWidget_pos.rowCount()):
             prodcode = price_dict['ProdCode'].decode()
             if  prodcode == self.tableWidget_pos.item(t, 0).text():
