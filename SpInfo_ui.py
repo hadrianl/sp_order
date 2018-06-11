@@ -1481,7 +1481,14 @@ class MainWindow(QtWidgets.QMainWindow):
     info_sig = pyqtSignal(str, str, int)
     def __init__(self, parent=None, *args, **kwargs):
         QtWidgets.QMainWindow.__init__(self, parent, *args, **kwargs)
-        self.resize(1161, 340)
+        self.menubar = QtWidgets.QMenuBar(self)
+        self.menu = QtWidgets.QMenu('文件', self.menubar)
+        self.actionsave_trade_records = QtWidgets.QAction('保存交易记录', self)
+        self.menu.addAction( self.actionsave_trade_records)
+        self.menubar.addMenu(self.menu)
+        self.setMenuBar(self.menubar)
+
+        self.resize(1161, 360)
         self.login_status = False
         self._init_done = False
         self.handle_queue = Queue()  # 处理队列
@@ -1498,6 +1505,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update_thread.start()
         self.trayicon = QTrayIcon(self)
         self.var_test = QTest(self)
+        self.setCentralWidget(self.AccInfo)
         self.init_signal()
         self.init_callback()  # 初始化回调函数
 
@@ -1559,6 +1567,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.AccInfo.price_update_sig.connect(lambda p: self.statusBar().showMessage(f'系统时间:{str(dt.datetime.now().time())[0:8]}   数据时间:{str(dt.datetime.fromtimestamp(p["Timestamp"]).time())[0:8]}'))
         self.AccInfo.pushButton_trade_history.released.connect(lambda :self.init_trade_history())
+        self.actionsave_trade_records.triggered.connect(lambda b: self.save_trade_info())
 
     def bind_account(self, account_id):
         self.OrderStoploss.comboBox_account.addItem(account_id)
@@ -2083,6 +2092,7 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         self.pushButton_del_remain_sl.released.connect(self.del_remain_sl)
         self.groupBox_price.toggled.connect(lambda b: self.resize(510, 700) if b else self.resize(510, 350))
         self.tableWidget_bid_ask.itemDoubleClicked.connect(lambda item: self.spinBox_Price.setValue(int(float(item.text()))) if item.column() ==  0 else ...)
+        self.lineEdit_ProdCode.editingFinished.connect(self.update_all_pos)
 
     def update_bid_ask_table(self, price):
         if self.tableWidget_bid_ask.isEnabled() and price['ProdCode'].decode() == self.lineEdit_ProdCode.text():
