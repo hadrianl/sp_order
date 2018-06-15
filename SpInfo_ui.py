@@ -26,7 +26,7 @@ import os
 import pickle
 import datetime as dt
 import time
-from utils import get_order_cond
+from utils import get_order_cond, print_info
 from baseitems import QData
 from functools import reduce
 from operator import add
@@ -71,7 +71,6 @@ class QMT4OrderTable(QtWidgets.QTableView):
         if self._db.open():
             self._model = self.QDataModel(self, self._db)
             self._model.setTable(table)
-            self._model.select()
             self._model.sort(3, Qt.Qt.DescendingOrder)
             self.setModel(self._model)
             self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
@@ -283,6 +282,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
         acc_info_dict = self.data.Acc
         base_ccy = acc_info_dict['BaseCcy'].decode()
         ctrllevel_dict = {0: '正常', 1: '停止交易', 2: '暂停', 3: '冻结户口'}
+        marginperiod = {-2: '错误', -1: '混合',0: 'NULL',1: '隔夜',2: '即日',3: '段落暂停'}
         try:
             MarginLevel = (acc_info_dict['CashBal'] + acc_info_dict['CreditLimit'] + acc_info_dict['CommodityPL']) / \
                           acc_info_dict['IMargin']
@@ -297,7 +297,7 @@ class AccInfoWidget(QtWidgets.QWidget, Ui_Form_acc_info):
                     f"{acc_info_dict['MMargin']:,} {base_ccy}",
                     ML,
                     f"{acc_info_dict['MaxMargin']:,} {base_ccy}",
-                    f"{ord(acc_info_dict['MarginPeriod'])}",
+                    f"{marginperiod[ord(acc_info_dict['MarginPeriod'])]}",
                     f"{acc_info_dict['CashBal']:,} {base_ccy}",
                     f"{acc_info_dict['CreditLimit']:,} {base_ccy}",
                     f"{ctrllevel_dict[ord(acc_info_dict['CtrlLevel'])]}",
@@ -2086,6 +2086,7 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         self.pos_update_sig.connect(
             lambda: [self.update_holding_pos_LIFO(), self.update_session_pos(), self.update_all_pos()])
         self.pushButton_stoploss.released.connect(self.quick_stoploss)
+        self.pushButton_takeprofit.released.connect(self.quick_takeprofit)
         self.pushButton_del_all_orders.released.connect(delete_all_orders)
         self.pushButton_del_long_sl.released.connect(self.del_long_sl)
         self.pushButton_del_short_sl.released.connect(self.del_short_sl)
@@ -2263,7 +2264,8 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
             self.holding_qty, holding_price = self._get_holding_pos(self.parent().AccInfo.data.Trade)
             self.holding_pos = [self.holding_qty, holding_price]
         except Exception as e:
-            self.lineEdit_hodling_pos.setText('-')
+            self.lineEdit_hodling_pos.setText('-@-')
+            self.holding_pos = [0, 0]
         else:
             if self.holding_qty != 0:
                 self.lineEdit_hodling_pos.setText(f'{self.holding_qty}@{holding_price:.2f}')
@@ -2279,15 +2281,16 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
                 d = data.iloc[-1]
                 session_holding_pos = d['持仓']
                 session_net_cost = d['净会话成本']
+                self.session_pos = [session_holding_pos, session_net_cost]
             else:
                 raise Exception('无交易信息')
         except Exception as e:
-            self.lineEdit_session_pos.setText('-')
+            self.lineEdit_session_pos.setText('-@-')
+            self.session_pos = [0, 0]
             print(e)
         else:
             if session_holding_pos != 0:
                 self.lineEdit_session_pos.setText(f'{session_holding_pos}@{session_net_cost}')
-                self.session_pos = [session_holding_pos, session_net_cost]
             else:
                 self.lineEdit_session_pos.setText('-@-')
 
@@ -2311,6 +2314,8 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
         prodcode = self.lineEdit_prodcode.text()
         if price_dict['ProdCode'].decode() == prodcode:
             self.groupBox_quick_sl.setTitle(f'{prodcode}@{price_dict["Last"][0]}')
+            self.latest_holding_price = [getattr(self, 'holding_qty', 0), price_dict['Last'][0]]
+            self.lineEdit_latest_price.setText(f'{getattr(self, "holding_qty", 0)}@{price_dict["Last"][0]}')
 
     def quick_stoploss(self):
         try:
@@ -2320,12 +2325,14 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
                 qty, price = self.session_pos
             elif self.radioButton_all.isChecked():
                 qty, price = self.all_pos
+            elif self.radioButton_latest_price.isChecked():
+                qty, price = self.latest_holding_price
             else:
                 raise Exception('请选择止损方式')
         except Exception as e:
             QMessageBox.warning(self, '<WARING>止损', f'无法获取持仓:{e}')
             return
-        lock = self.spinBox_lock.value()
+        lock = self.spinBox_sl_lock.value()
 
         if qty > 0 :
             if qty > lock:
@@ -2358,6 +2365,55 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
                 comfirm_order.accepted.connect(lambda: add_order(**order_kwargs))
             else:
                 QMessageBox.warning(self,  '<WARING>止损', '全部仓位已锁定, ,请重新设置锁定仓位')
+
+    def quick_takeprofit(self):
+        try:
+            if self.radioButton_holding.isChecked():
+                qty, price = self.holding_pos
+            elif self.radioButton_session.isChecked():
+                qty, price = self.session_pos
+            elif self.radioButton_all.isChecked():
+                qty, price = self.all_pos
+            elif self.radioButton_latest_price.isChecked():
+                qty, price = self.latest_holding_price
+            else:
+                raise Exception('请选择止盈方式')
+        except Exception as e:
+            QMessageBox.warning(self, '<WARING>止盈', f'无法获取持仓:{e}')
+            return
+        lock = self.spinBox_tp_lock.value()
+
+        if qty > 0 :
+            if qty > lock:
+                q = qty - lock
+                tp_price = price + self.spinBox_takeprofit_addtion.value()
+                order_kwargs = dict(ProdCode=self.lineEdit_prodcode.text(), BuySell='S', OrderOptions=0,
+                          Qty=q, ValidType=0, CondType=0, OrderType=0, Price=round(tp_price),
+                          Ref='quick_tp-short')
+                cond = get_order_cond(order_kwargs)
+                comfirm_order = ComfirmDialog(self, Cond=cond, **order_kwargs)
+                comfirm_order.show()
+                comfirm_order.accepted.connect(lambda: add_order(**order_kwargs))
+                if tp_price < self.latest_holding_price[1]:
+                    QMessageBox.warning(self, '<止盈>', f'止盈价{tp_price: .2f}低于现价{self.latest_holding_price[1]: .2f}，将会马上触发')
+            else:
+                QMessageBox.warning(self, '<WARING>止盈', '全部仓位已锁定,请重新设置锁定仓位')
+        elif qty < 0:
+            if -qty > lock:
+                q = -qty - lock
+                tp_price = price - self.spinBox_takeprofit_addtion.value()
+                order_kwargs = dict(ProdCode=self.lineEdit_prodcode.text(), BuySell='B', OrderOptions=0,
+                          Qty=q, ValidType=0, CondType=0, OrderType=0, Price=round(tp_price),
+                          Ref='quick_tp-long')
+                cond = get_order_cond(order_kwargs)
+                comfirm_order = ComfirmDialog(self, Cond=cond, **order_kwargs)
+                comfirm_order.show()
+                comfirm_order.accepted.connect(lambda: add_order(**order_kwargs))
+                if tp_price > self.latest_holding_price[1]:
+                    QMessageBox.warning(self, '<止盈>',
+                                        f'止盈价{tp_price: .2f}高于现价{self.latest_holding_price[1]: .2f}，将会马上触发')
+            else:
+                QMessageBox.warning(self,  '<WARING>止盈', '全部仓位已锁定, ,请重新设置锁定仓位')
 
     def del_long_sl(self):
         try:

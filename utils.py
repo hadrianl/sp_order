@@ -63,9 +63,9 @@ def get_order_cond(order):
     return cond
 
 
-def print_info(info_array):
+def print_info(ctype_data):
     info_dict = {}
-    for i in info_array:
-        for name, c_type in i._fields_:
-            info_dict[name] = getattr(i, name)
-        print(info_dict)
+    for name, c_type in ctype_data._fields_:
+        info_dict[name] = getattr(ctype_data, name)
+    print(info_dict)
+    return  info_dict
