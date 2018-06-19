@@ -2365,6 +2365,8 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
                 comfirm_order.accepted.connect(lambda: add_order(**order_kwargs))
             else:
                 QMessageBox.warning(self,  '<WARING>止损', '全部仓位已锁定, ,请重新设置锁定仓位')
+        else:
+            QMessageBox.warning(self, '<WARING>止盈', '请检查仓位')
 
     def quick_takeprofit(self):
         try:
@@ -2414,6 +2416,8 @@ class QOrderStoplossDialog(QDialog, Ui_Dialog_order_stoploss):
                                         f'止盈价{tp_price: .2f}高于现价{self.latest_holding_price[1]: .2f}，将会马上触发')
             else:
                 QMessageBox.warning(self,  '<WARING>止盈', '全部仓位已锁定, ,请重新设置锁定仓位')
+        else:
+            QMessageBox.warning(self, '<WARING>止盈', '请检查仓位')
 
     def del_long_sl(self):
         try:
