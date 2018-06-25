@@ -1519,7 +1519,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.AccInfo.checkBox_follow_orders.toggled.connect(
             lambda b: self.init_order_follower() if b else self.deinit_order_follower())  # 绑定跟单的checkbox可以初始化与反初始化跟单
         self.login_sig.connect(
-            lambda: self.timer.singleShot(3000, lambda :[[subscribe_price(p, 1) for p in self.AccInfo.data.sub_list],
+            lambda: self.timer.singleShot(10000, lambda :[[subscribe_price(p, 1) for p in self.AccInfo.data.sub_list],
                                                          setattr(self, '_init_done', True),
                                                          self.AccInfo.refresh_accbals(),
                                                          self.AccInfo.refresh_ccy_rate()]))  # 登录三秒后执行登陆后的处理函数
@@ -1576,6 +1576,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def save_trade_info(self):
         try:
             conn = pm.connect(host='192.168.2.226', port=3306, user='kairuitouzi', passwd='kairuitouzi', db='carry_investment')
+            conn.set_charset('utf8')
             cursor = conn.cursor()
             trades = get_all_trades_by_array()
             # trades_info = []
