@@ -1718,6 +1718,44 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             print(e)
 
+    def _save_trade(self, trade):
+        trade_dict = dict()
+        try:
+            for n, t in trade._fields_:
+                v = getattr(trade, n)
+                trade_dict[n] = v.decode() if isinstance(v, bytes) else v
+            conn = pm.connect(host='192.168.2.226', port=3306, user='kairuitouzi', passwd='kairuitouzi',
+                              db='carry_investment')
+            conn.set_charset('utf8')
+            cursor = conn.cursor()
+
+            values = ','.join(['"' + str(v) + '"' for v in trade_dict.values()])
+            sql = f'replace into sp_trade_records values({values})'
+            cursor.execute(sql)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(e)
+
+    def _save_order(self, order):
+        order_dict = dict()
+        try:
+            for n, t in order._fields_:
+                v = getattr(order, n)
+                order_dict[n] = v.decode() if isinstance(v, bytes) else v
+            conn = pm.connect(host='192.168.2.226', port=3306, user='kairuitouzi', passwd='kairuitouzi',
+                              db='carry_investment')
+            conn.set_charset('utf8')
+            cursor = conn.cursor()
+
+            values = ','.join(['"' + str(v) + '"' for v in order_dict.values()])
+            sql = f'replace into sp_order_records values({values})'
+            cursor.execute(sql)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(e)
+
     def closeEvent(self, a0: QtGui.QCloseEvent):
         reply = QtWidgets.QMessageBox.question(self, '退出', "是否要退出SP下单？",
                                                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
@@ -1813,6 +1851,8 @@ class MainWindow(QtWidgets.QMainWindow):
         def order_report(rec_no, order):
             info_handle('<订单>', f'编号:{rec_no}-@{order.ProdCode.decode()}-Status:{ORDER_STATUS[order.Status]}', 0,
                         AccInfo._refresh_order, order)
+            info_handle('<订单>', f'编号:{rec_no}-@{order.ProdCode.decode()}-Status:{ORDER_STATUS[order.Status]}插入数据库', 0,
+                        self._save_order, order)
 
         @on_trade_report  # 成交记录更新后回调出推送新的成交记录
         def trade_report(rec_no, trade):
@@ -1828,6 +1868,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 数量:{trade.Qty}\n
                 参考:{trade.Ref.decode()}"""
                 self.handle_queue.put([AccInfo.info_sig.emit, ('<INFO>新成交', info), {}])
+            info_handle('<成交>',
+                        f'{rec_no}新成交{trade.OpenClose.decode()}--@{trade.ProdCode.decode()}--{trade.BuySell.decode()}--Price:{trade.AvgPrice}--Qty:{trade.Qty}插入数据库',
+                        0, self._save_trade, trade)
 
         @on_updated_account_position_push  # 新持仓信息
         def updated_account_position_push(pos):
