@@ -1739,6 +1739,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _save_order(self, order):
         order_dict = dict()
+        if order.Status in [0, 4, 5, 6, 7]:
+            return
         try:
             for n, t in order._fields_:
                 v = getattr(order, n)
