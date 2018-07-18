@@ -14,7 +14,7 @@ import pymysql as pm
 import datetime as dt
 from queue import Queue, Empty
 import time
-from utils import MT4_ORDER_TYPE, FOLLOWER_STRATEGY
+from utils import MT4_ORDER_TYPE, FOLLOWER_STRATEGY, HOST, PORT, USER, PASSWD, DB
 from spapi.spAPI import add_order
 import itchat
 from itchat.content import *
@@ -37,11 +37,11 @@ class QPubOrder(QThread):
         self.order_queue = Queue()
         if dbconfig == None:
             try:
-                dbconfig = {'host': '192.168.2.226',
-                            'port': 3306,
-                            'user': 'kairuitouzi',
-                            'password': 'kairuitouzi',
-                            'db': 'carry_investment',
+                dbconfig = {'host': HOST,
+                            'port': PORT,
+                            'user': USER,
+                            'password': PASSWD,
+                            'db': DB,
                             'cursorclass': pm.cursors.DictCursor,
                             }
                 self.conn = pm.connect(**dbconfig)

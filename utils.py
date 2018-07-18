@@ -5,6 +5,7 @@
 # @File    : utils.py
 # @License : (C) Copyright 2013-2017, 凯瑞投资
 import datetime as dt
+import configparser
 
 MT4_ORDER_TYPE = {0: '买入',
                   1: '卖出',
@@ -17,6 +18,15 @@ MT4_ORDER_TYPE = {0: '买入',
 FOLLOWER_STRATEGY = {8946946:0,
                      8942813:0,
                      8946490:0}
+
+parser = configparser.ConfigParser()
+parser.read('info.conf')
+
+HOST = parser.get('MYSQL', 'HOST')
+PORT= parser.getint('MYSQL', 'PORT')
+USER= parser.get('MYSQL', 'USER')
+PASSWD= parser.get('MYSQL', 'PASSWD')
+DB= parser.get('MYSQL', 'DB')
 
 def get_order_cond(order):
     order_kwargs = {}

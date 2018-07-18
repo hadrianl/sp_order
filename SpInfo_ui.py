@@ -27,6 +27,7 @@ import pickle
 import datetime as dt
 import time
 from utils import get_order_cond, print_info
+from utils import HOST, PORT, USER, PASSWD, DB
 from baseitems import QData
 from functools import reduce
 from operator import add
@@ -1575,7 +1576,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def save_trade_info(self):
         try:
-            conn = pm.connect(host='192.168.2.226', port=3306, user='kairuitouzi', passwd='kairuitouzi', db='carry_investment')
+            conn = pm.connect(host=HOST, port=PORT, user=USER, passwd=PASSWD, db=DB)
             conn.set_charset('utf8')
             cursor = conn.cursor()
             trades = get_all_trades_by_array()
@@ -1724,8 +1725,8 @@ class MainWindow(QtWidgets.QMainWindow):
             for n, t in trade._fields_:
                 v = getattr(trade, n)
                 trade_dict[n] = v.decode() if isinstance(v, bytes) else v
-            conn = pm.connect(host='192.168.2.226', port=3306, user='kairuitouzi', passwd='kairuitouzi',
-                              db='carry_investment')
+            conn = pm.connect(host=HOST, port=PORT, user=USER, passwd=PASSWD,
+                              db=DB)
             conn.set_charset('utf8')
             cursor = conn.cursor()
 
